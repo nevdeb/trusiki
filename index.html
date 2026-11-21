@@ -1,0 +1,2525 @@
+<!DOCTYPE html>
+<html lang="ru" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Трусики</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    // Конфигурация проекта Firebase для домена trusiki.vercel.app
+    window.FIREBASE_CONFIG = {
+      apiKey: "AIzaSyCt1Y-p7f30Qah5igY3Ug26YKI8EMdtxEY",
+      authDomain: "trusiki-32efb.firebaseapp.com",
+      databaseURL: "https://trusiki-32efb-default-rtdb.europe-west1.firebasedatabase.app",
+      projectId: "trusiki-32efb",
+      storageBucket: "trusiki-32efb.firebasestorage.app",
+      messagingSenderId: "96147351301",
+      appId: "1:96147351301:web:681089c880c4a6fdc3b96c"
+    };
+
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+          },
+          colors: {
+            bgBase: '#000000',
+            bgElevated: '#0A0A0A',
+            bgCard: '#111111',
+            bgCardHover: '#161616',
+            borderSubtle: '#1F1F1F',
+            borderHover: '#333333',
+            textPrimary: '#EDEDED',
+            textSecondary: '#888888',
+            textMuted: '#555555',
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+    html, body {
+      background-color: #000000;
+      color: #EDEDED;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #000000;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #222222;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #333333;
+    }
+    .glass-header {
+      background: rgba(0, 0, 0, 0.85);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fade-in {
+      animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+  </style>
+</head>
+<body class="bg-bgBase text-textPrimary antialiased selection:bg-white selection:text-black">
+
+  <!-- Контейнер экрана технических работ (если сайт ВЫКЛ для всех кроме @max) -->
+  <div id="maintenance-screen" class="hidden min-h-screen flex items-center justify-center p-6 bg-black">
+    <div class="max-w-md w-full rounded-2xl bg-[#0D0D0D] border border-[#242424] p-8 text-center animate-fade-in">
+      <div class="w-14 h-14 rounded-2xl bg-white text-black flex items-center justify-center mx-auto mb-5 shadow-sm">
+        <svg class="w-6 h-6 fill-black" viewBox="0 0 24 24">
+          <polygon points="12,4 22,20 2,20" />
+        </svg>
+      </div>
+      <h1 class="text-2xl font-bold text-white tracking-tight">Трусики</h1>
+      <p class="mt-4 text-sm font-medium text-[#E5E5E5]">
+        The site is currently under maintenance.
+      </p>
+      <p class="mt-2 text-sm text-textSecondary leading-relaxed">
+        Сайт в данный момент находится на техническом обслуживании и ремонте. Скоро вернёмся.
+      </p>
+      <button onclick="openAuthModal('Вход для администратора @max')"
+              class="mt-6 inline-flex items-center justify-center px-4 py-2 rounded-xl bg-[#161616] hover:bg-[#222222] border border-borderHover text-xs text-textSecondary hover:text-white transition-colors cursor-pointer">
+        Вход для администратора
+      </button>
+    </div>
+  </div>
+
+  <!-- Основной интерфейс приложения -->
+  <div id="main-shell">
+    <!-- Верхняя навигационная панель -->
+    <header class="sticky top-0 z-40 border-b border-borderSubtle glass-header">
+      <div class="max-w-[820px] mx-auto px-4 h-16 flex items-center justify-between gap-3">
+        <!-- Логотип + Название Трусики + вкладка Посты -->
+        <div class="flex items-center gap-5 shrink-0">
+          <a href="/" onclick="navigate(event, '/')" class="flex items-center gap-2.5 group focus:outline-none">
+            <div class="w-8 h-8 rounded-xl bg-white text-black flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
+              <svg class="w-3.5 h-3.5 fill-black" viewBox="0 0 24 24">
+                <polygon points="12,4 22,20 2,20" />
+              </svg>
+            </div>
+            <span class="font-semibold text-[17px] tracking-tight text-white">Трусики</span>
+          </a>
+
+          <nav class="hidden sm:flex items-center">
+            <a href="/" id="nav-tab-posts" onclick="navigate(event, '/')"
+               class="relative px-3 py-4 text-sm font-medium text-white transition-colors">
+              Посты
+              <span id="nav-tab-indicator" class="absolute bottom-0 left-3 right-3 h-[2px] bg-white rounded-full transition-opacity"></span>
+            </a>
+          </nav>
+        </div>
+
+        <!-- Поиск по содержанию постов в шапке -->
+        <div class="flex-1 max-w-[280px] hidden md:block">
+          <div class="relative">
+            <svg class="w-4 h-4 text-textSecondary absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35m1.85-5.15a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input id="header-search-input" type="search"
+                   oninput="handleSearchQueryChange(this.value)"
+                   placeholder="Поиск по постам..."
+                   class="w-full bg-[#111111] border border-borderSubtle focus:border-neutral-500 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white placeholder-textMuted focus:outline-none transition-colors" />
+          </div>
+        </div>
+
+        <!-- Правая часть: Кнопка Создать пост + Кружок профиля -->
+        <div class="flex items-center gap-2.5 shrink-0">
+          <button onclick="navigate(null, '/new')"
+                  class="inline-flex items-center gap-1.5 bg-white hover:bg-neutral-200 active:scale-[0.98] text-black font-medium text-xs sm:text-sm px-3.5 py-2 rounded-xl transition-all cursor-pointer shadow-sm">
+            <svg class="w-4 h-4 stroke-[2.2]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+            <span>Создать пост</span>
+          </button>
+
+          <!-- Кружок профиля и выпадающее меню -->
+          <div class="relative" id="user-menu-container">
+            <button id="avatar-trigger" onclick="handleAvatarClick(event)"
+                    title="Аккаунт"
+                    class="w-9 h-9 rounded-full border border-borderHover bg-bgCard hover:border-neutral-400 flex items-center justify-center overflow-hidden transition-all cursor-pointer focus:outline-none">
+              <svg class="w-4 h-4 text-textSecondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+              </svg>
+            </button>
+
+            <div id="user-dropdown" class="hidden absolute right-0 mt-2.5 w-64 rounded-2xl bg-[#111111] border border-[#242424] shadow-2xl py-1.5 z-50 animate-fade-in">
+              <div class="px-3.5 py-2.5 border-b border-borderSubtle">
+                <p id="dropdown-name" class="text-sm font-medium text-white truncate">Пользователь</p>
+                <p id="dropdown-handle" class="text-xs text-textSecondary truncate">@user</p>
+              </div>
+
+              <button onclick="openMyProfile()" class="w-full text-left px-3.5 py-2.5 text-sm text-textPrimary hover:bg-white/5 flex items-center gap-2.5 transition-colors cursor-pointer">
+                <span>Мой профиль</span>
+              </button>
+
+              <!-- Пункты только для аккаунта @max -->
+              <div id="admin-menu-items" class="hidden border-t border-borderSubtle my-1 pt-1">
+                <button onclick="toggleAdminRights(event)" class="w-full text-left px-3.5 py-2.5 text-sm text-textPrimary hover:bg-white/5 flex items-center justify-between transition-colors cursor-pointer">
+                  <span>Админ права</span>
+                  <span id="admin-rights-check" class="w-4 h-4 rounded border flex items-center justify-center text-[11px] font-bold">✓</span>
+                </button>
+                <button onclick="openAdminPanelModal(); closeUserDropdown();" class="w-full text-left px-3.5 py-2.5 text-sm text-emerald-400 hover:bg-emerald-500/10 flex items-center justify-between transition-colors cursor-pointer">
+                  <span>Админ-меню</span>
+                  <span id="admin-support-badge" class="hidden px-1.5 py-0.5 text-[10px] rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">!</span>
+                </button>
+              </div>
+
+              <div class="my-1 border-t border-borderSubtle"></div>
+              <button onclick="logoutUser()" class="w-full text-left px-3.5 py-2.5 text-sm text-red-400 hover:bg-red-500/10 flex items-center gap-2.5 transition-colors cursor-pointer">
+                <span>Выйти из аккаунта</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Основной контейнер контента -->
+    <main id="app-root" class="max-w-[760px] mx-auto px-4 pt-6 pb-20"></main>
+  </div>
+
+  <!-- Экран блокировки при бане пользователя -->
+  <div id="ban-screen" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/95 backdrop-blur-md">
+    <div class="w-full max-w-[420px] rounded-2xl bg-[#0D0D0D] border border-red-500/30 p-6 shadow-2xl text-center animate-fade-in">
+      <div class="w-12 h-12 rounded-2xl bg-red-500/15 border border-red-500/30 text-red-400 flex items-center justify-center mx-auto mb-4 font-bold text-lg">
+        !
+      </div>
+      <h2 class="text-xl font-bold text-red-400">Вы забанены!</h2>
+      <p class="text-xs text-textSecondary mt-1">Доступ к платформе Трусики ограничен.</p>
+
+      <div class="mt-5 rounded-xl bg-[#141414] border border-borderSubtle p-4 text-left space-y-2.5 text-xs">
+        <div>
+          <span class="text-textSecondary">Причина:</span>
+          <p id="ban-reason-text" class="text-white font-medium mt-0.5">—</p>
+        </div>
+        <div>
+          <span class="text-textSecondary">Срок / время бана:</span>
+          <p id="ban-duration-text" class="text-amber-300 font-medium mt-0.5">—</p>
+        </div>
+      </div>
+
+      <div class="mt-5 flex flex-col gap-2.5">
+        <button onclick="openSupportModal()"
+                class="w-full py-2.5 px-4 rounded-xl bg-white hover:bg-neutral-200 text-black font-medium text-sm transition-colors cursor-pointer">
+          Написать в поддержку
+        </button>
+        <button onclick="logoutBannedUser()"
+                class="w-full py-2 px-4 rounded-xl bg-transparent hover:bg-white/5 text-textSecondary hover:text-white text-xs transition-colors cursor-pointer">
+          Выйти из аккаунта
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Модальное окно авторизации (Google + Ник/Пароль) -->
+  <div id="auth-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+    <div class="w-full max-w-[400px] rounded-2xl bg-[#0D0D0D] border border-[#242424] p-6 shadow-2xl relative">
+      <button onclick="closeAuthModal()" class="absolute top-4 right-4 w-8 h-8 rounded-lg text-textSecondary hover:text-white hover:bg-white/5 flex items-center justify-center transition-colors cursor-pointer">
+        ✕
+      </button>
+
+      <!-- Основной вход -->
+      <div id="auth-step-main">
+        <div class="w-11 h-11 rounded-2xl bg-white text-black flex items-center justify-center mb-4">
+          <svg class="w-5 h-5 fill-black" viewBox="0 0 24 24">
+            <polygon points="12,4 22,20 2,20" />
+          </svg>
+        </div>
+
+        <h2 class="text-lg font-semibold text-white tracking-tight">Войти в Трусики</h2>
+        <p id="auth-modal-subtitle" class="text-sm text-textSecondary mt-1 leading-relaxed">
+          Войдите через Google или по нику и паролю.
+        </p>
+
+        <div class="mt-5 space-y-4">
+          <button id="btn-google-login" onclick="loginWithGoogle()"
+                  class="w-full flex items-center justify-center gap-3 bg-white hover:bg-neutral-200 active:scale-[0.99] text-black font-medium text-sm py-3 px-4 rounded-xl transition-all cursor-pointer shadow-sm">
+            <svg class="w-4 h-4" viewBox="0 0 24 24">
+              <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"/>
+              <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.96H1.29v3.14C3.26 21.3 7.31 24 12 24z"/>
+              <path fill="#FBBC05" d="M5.28 14.24c-.24-.72-.38-1.49-.38-2.24s.14-1.52.38-2.24V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.99-3.14z"/>
+              <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.99 3.14c.95-2.85 3.6-4.96 6.72-4.96z"/>
+            </svg>
+            <span>Войти через Google</span>
+          </button>
+
+          <div class="relative flex items-center py-1">
+            <div class="flex-grow border-t border-borderSubtle"></div>
+            <span class="shrink mx-3 text-[11px] text-textSecondary">или по нику и паролю</span>
+            <div class="flex-grow border-t border-borderSubtle"></div>
+          </div>
+
+          <form onsubmit="loginWithCredentials(event)" class="space-y-2.5">
+            <input id="auth-nick-input" type="text" maxlength="28" required placeholder="Никнейм (например: max)"
+                   class="w-full bg-bgCard border border-borderSubtle focus:border-neutral-500 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-textMuted focus:outline-none transition-colors" />
+            <input id="auth-pass-input" type="password" maxlength="64" required placeholder="Пароль"
+                   class="w-full bg-bgCard border border-borderSubtle focus:border-neutral-500 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-textMuted focus:outline-none transition-colors" />
+            <button type="submit"
+                    class="w-full py-2.5 px-4 rounded-xl bg-[#1A1A1A] hover:bg-[#242424] border border-borderHover text-sm font-medium text-white transition-all cursor-pointer">
+              Войти
+            </button>
+          </form>
+        </div>
+
+        <div id="auth-error-msg" class="hidden mt-3.5 text-xs text-amber-200 bg-amber-500/10 border border-amber-500/25 rounded-xl p-3"></div>
+      </div>
+
+      <!-- Шаг 2: Выбор ника и пароля при первом входе через Google -->
+      <div id="auth-step-google-setup" class="hidden">
+        <div class="w-11 h-11 rounded-2xl bg-white text-black flex items-center justify-center mb-4">
+          <svg class="w-5 h-5 fill-black" viewBox="0 0 24 24">
+            <polygon points="12,4 22,20 2,20" />
+          </svg>
+        </div>
+        <h2 class="text-lg font-semibold text-white tracking-tight">Придумайте ник и пароль</h2>
+        <p class="text-sm text-textSecondary mt-1 leading-relaxed">
+          Вы впервые вошли через этот Google-аккаунт. Задайте никнейм и пароль для аккаунта Трусики.
+        </p>
+
+        <form onsubmit="completeGoogleRegistration(event)" class="mt-5 space-y-3">
+          <div>
+            <label class="block text-xs text-textSecondary mb-1.5">Никнейм</label>
+            <input id="google-setup-nick" type="text" maxlength="28" required placeholder="Ваш никнейм"
+                   class="w-full bg-bgCard border border-borderSubtle focus:border-neutral-500 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-textMuted focus:outline-none" />
+          </div>
+          <div>
+            <label class="block text-xs text-textSecondary mb-1.5">Пароль</label>
+            <input id="google-setup-pass" type="password" maxlength="64" required placeholder="Придумайте пароль"
+                   class="w-full bg-bgCard border border-borderSubtle focus:border-neutral-500 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-textMuted focus:outline-none" />
+          </div>
+          <button type="submit"
+                  class="w-full py-2.5 px-4 rounded-xl bg-white hover:bg-neutral-200 text-black font-medium text-sm transition-all cursor-pointer">
+            Сохранить и войти
+          </button>
+        </form>
+
+        <div id="google-setup-error" class="hidden mt-3 text-xs text-red-400 bg-red-500/10 border border-red-500/25 rounded-xl p-2.5"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Модальное окно капчи "Стоп, а вы не робот?" -->
+  <div id="captcha-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fade-in">
+    <div class="w-full max-w-[380px] rounded-2xl bg-[#0D0D0D] border border-[#282828] p-6 shadow-2xl">
+      <h3 class="text-lg font-bold text-white">Стоп, а вы не робот?</h3>
+      <p id="captcha-reason-text" class="text-xs text-textSecondary mt-1 leading-relaxed">
+        Вы проявили высокую активность. Подтвердите, что вы человек, чтобы продолжить.
+      </p>
+
+      <form onsubmit="verifyCaptcha(event)" class="mt-4 space-y-3">
+        <div class="p-3.5 rounded-xl bg-[#141414] border border-borderSubtle flex items-center justify-between">
+          <span class="text-xs text-textSecondary">Решите пример:</span>
+          <span id="captcha-question" class="text-base font-bold text-white font-mono">2 + 2 = ?</span>
+        </div>
+        <input id="captcha-answer-input" type="number" required placeholder="Введите ответ..."
+               class="w-full bg-bgCard border border-borderSubtle focus:border-neutral-400 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-textMuted focus:outline-none" />
+        <p id="captcha-error-msg" class="hidden text-xs text-red-400">Неверный ответ, попробуйте ещё раз.</p>
+        <div class="flex gap-2 pt-1">
+          <button type="button" onclick="closeCaptchaModal()"
+                  class="flex-1 py-2.5 rounded-xl bg-[#161616] text-textSecondary hover:text-white text-xs font-medium cursor-pointer">
+            Отмена
+          </button>
+          <button type="submit"
+                  class="flex-1 py-2.5 rounded-xl bg-white hover:bg-neutral-200 text-black text-xs font-semibold cursor-pointer">
+            Подтвердить
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Админ-меню для @max: статус сайта, баны и чат поддержки -->
+  <div id="admin-panel-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fade-in">
+    <div class="w-full max-w-[680px] max-h-[88vh] flex flex-col rounded-2xl bg-[#0D0D0D] border border-[#262626] shadow-2xl overflow-hidden">
+      <div class="px-5 py-4 border-b border-borderSubtle flex items-center justify-between">
+        <div>
+          <h3 class="text-base font-bold text-white">Админ-меню (@max)</h3>
+          <p class="text-xs text-textSecondary">Управление сайтом, банами и обращениями в поддержку</p>
+        </div>
+        <button onclick="closeAdminPanelModal()" class="w-8 h-8 rounded-lg text-textSecondary hover:text-white hover:bg-white/5 flex items-center justify-center cursor-pointer">
+          ✕
+        </button>
+      </div>
+
+      <!-- Вкладки админ-меню -->
+      <div class="px-5 pt-3 border-b border-borderSubtle flex gap-2">
+        <button id="admin-tab-general" onclick="switchAdminTab('general')"
+                class="px-3.5 py-2 rounded-t-xl text-xs font-medium bg-white text-black cursor-pointer">
+          Сайт и Баны
+        </button>
+        <button id="admin-tab-support" onclick="switchAdminTab('support')"
+                class="px-3.5 py-2 rounded-t-xl text-xs font-medium text-textSecondary hover:text-white cursor-pointer flex items-center gap-1.5">
+          <span>Поддержка</span>
+          <span id="admin-support-count" class="px-1.5 py-0.2 rounded-full bg-[#1C1C1C] text-white text-[10px]">0</span>
+        </button>
+      </div>
+
+      <div class="p-5 overflow-y-auto space-y-6 flex-1">
+        <!-- Вкладка 1: Статус сайта и Баны -->
+        <div id="admin-section-general" class="space-y-6">
+          <!-- Переключатель Сайт ВКЛ / ВЫКЛ с галочкой -->
+          <div class="p-4 rounded-2xl bg-[#131313] border border-borderSubtle flex items-center justify-between gap-4">
+            <div>
+              <p class="text-sm font-semibold text-white">Статус сайта: <span id="site-status-label" class="text-emerald-400">ВКЛ</span></p>
+              <p class="text-xs text-textSecondary mt-0.5">
+                При ВЫКЛ для всех пользователей, кроме @max, отображается страница техработ на английском и русском.
+              </p>
+            </div>
+            <button onclick="toggleSiteMaintenance()"
+                    class="px-4 py-2 rounded-xl border border-borderHover bg-[#1B1B1B] hover:bg-[#242424] text-xs font-semibold text-white flex items-center gap-2 cursor-pointer shrink-0">
+              <span id="site-enabled-checkbox" class="w-4 h-4 rounded border border-white bg-white text-black flex items-center justify-center text-[11px] font-bold">✓</span>
+              <span>Сайт ВКЛ</span>
+            </button>
+          </div>
+
+          <!-- Форма выдачи бана -->
+          <div class="p-4 rounded-2xl bg-[#131313] border border-borderSubtle space-y-3">
+            <h4 class="text-sm font-semibold text-white">Забанить пользователя</h4>
+            <form onsubmit="submitBanUser(event)" class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <input id="ban-nick-input" type="text" required placeholder="Ник (без или с @)"
+                     class="bg-[#0B0B0B] border border-borderSubtle rounded-xl px-3 py-2 text-xs text-white placeholder-textMuted focus:outline-none focus:border-neutral-500" />
+              <input id="ban-reason-input" type="text" required placeholder="Причина бана"
+                     class="bg-[#0B0B0B] border border-borderSubtle rounded-xl px-3 py-2 text-xs text-white placeholder-textMuted focus:outline-none focus:border-neutral-500" />
+              <select id="ban-duration-select"
+                      class="bg-[#0B0B0B] border border-borderSubtle rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-neutral-500">
+                <option value="1h">1 час</option>
+                <option value="24h">24 часа</option>
+                <option value="7d">7 дней</option>
+                <option value="30d">30 дней</option>
+                <option value="perm">Навсегда</option>
+              </select>
+              <button type="submit"
+                      class="sm:col-span-3 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white text-xs font-semibold transition-colors cursor-pointer">
+                Забанить
+              </button>
+            </form>
+          </div>
+
+          <!-- Список забаненных с поиском, разбаном и сменой срока -->
+          <div class="space-y-3">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <h4 class="text-sm font-semibold text-white">Список банов</h4>
+              <input id="ban-search-input" type="search" oninput="renderBansList()"
+                     placeholder="Поиск по нику или причине..."
+                     class="bg-[#131313] border border-borderSubtle rounded-xl px-3 py-1.5 text-xs text-white placeholder-textMuted focus:outline-none focus:border-neutral-500" />
+            </div>
+            <div id="bans-list-container" class="space-y-2"></div>
+          </div>
+        </div>
+
+        <!-- Вкладка 2: Личные чаты поддержки (появляются только после первого сообщения пользователя) -->
+        <div id="admin-section-support" class="hidden space-y-4">
+          <div id="admin-support-threads" class="space-y-3"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Модальное окно чата поддержки для забаненного пользователя -->
+  <div id="support-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fade-in">
+    <div class="w-full max-w-[420px] rounded-2xl bg-[#0D0D0D] border border-[#262626] overflow-hidden shadow-2xl flex flex-col max-h-[82vh]">
+      <div class="px-5 py-3.5 border-b border-borderSubtle flex items-center justify-between">
+        <div>
+          <h3 class="text-sm font-semibold text-white">Поддержка Трусики</h3>
+          <p class="text-[11px] text-textSecondary">Личный чат с администратором</p>
+        </div>
+        <button onclick="closeSupportModal()" class="w-8 h-8 rounded-lg text-textSecondary hover:text-white hover:bg-white/5 flex items-center justify-center cursor-pointer">
+          ✕
+        </button>
+      </div>
+      <div id="user-support-messages" class="p-4 space-y-2.5 overflow-y-auto flex-1 min-h-[200px]"></div>
+      <form onsubmit="sendUserSupportMessage(event)" class="p-3 border-t border-borderSubtle flex gap-2">
+        <input id="user-support-input" type="text" required placeholder="Напишите сообщение в поддержку..."
+               class="flex-1 bg-[#141414] border border-borderSubtle rounded-xl px-3 py-2 text-xs text-white placeholder-textMuted focus:outline-none focus:border-neutral-500" />
+        <button type="submit"
+                class="px-4 py-2 rounded-xl bg-white hover:bg-neutral-200 text-black text-xs font-semibold cursor-pointer">
+          Отправить
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Модальное окно списка Подписчиков / Подписок -->
+  <div id="connections-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+    <div class="w-full max-w-[400px] rounded-2xl bg-[#0D0D0D] border border-[#242424] overflow-hidden shadow-2xl">
+      <div class="px-5 py-4 border-b border-borderSubtle flex items-center justify-between">
+        <h3 id="connections-modal-title" class="text-base font-semibold text-white">Подписчики</h3>
+        <button onclick="closeConnectionsModal()" class="w-8 h-8 rounded-lg text-textSecondary hover:text-white hover:bg-white/5 flex items-center justify-center cursor-pointer">
+          ✕
+        </button>
+      </div>
+      <div id="connections-modal-list" class="max-h-[360px] overflow-y-auto divide-y divide-borderSubtle"></div>
+    </div>
+  </div>
+
+  <!-- Контейнер всплывающих уведомлений -->
+  <div id="toast-container" class="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-2 pointer-events-none"></div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import {
+      getAuth,
+      GoogleAuthProvider,
+      signInWithPopup,
+      onAuthStateChanged,
+      signOut
+    } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import {
+      getFirestore,
+      doc,
+      getDoc,
+      setDoc,
+      deleteDoc,
+      collection,
+      onSnapshot
+    } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    // =========================================================================
+    // 1. ХРАНИЛИЩЕ И ИНИЦИАЛИЗАЦИЯ FIREBASE
+    // =========================================================================
+    const LS_KEYS = {
+      USERS: 'trusiki_v2_users',
+      POSTS: 'trusiki_v2_posts',
+      COMMENTS: 'trusiki_v2_comments',
+      SESSION: 'trusiki_v2_session_uid',
+      INTERESTS: 'trusiki_v2_interests',
+      MAINTENANCE: 'trusiki_v2_maintenance',
+      BANS: 'trusiki_v2_bans',
+      SUPPORT: 'trusiki_v2_support',
+      ACTIVITY: 'trusiki_v2_activity'
+    };
+
+    const hasValidFirebaseConfig = Boolean(
+      window.FIREBASE_CONFIG &&
+      typeof window.FIREBASE_CONFIG === 'object' &&
+      window.FIREBASE_CONFIG.apiKey
+    );
+
+    let fbApp = null;
+    let fbAuth = null;
+    let fbDb = null;
+
+    if (hasValidFirebaseConfig) {
+      try {
+        fbApp = initializeApp(window.FIREBASE_CONFIG);
+        fbAuth = getAuth(fbApp);
+        fbDb = getFirestore(fbApp);
+      } catch (e) {
+        console.warn("Firebase init fallback:", e);
+      }
+    }
+
+    const state = {
+      currentUser: null,
+      pendingGoogleUser: null,
+      posts: [],
+      comments: [],
+      usersMap: {},
+      bans: {},             // { [normNick]: { nick, reason, expiresAt, durationCode, updatedAt } }
+      supportThreads: {},   // { [userKey]: { userKey, nick, name, messages: [{ sender, text, createdAt }] } }
+      siteEnabled: true,    // Флаг активности сайта (ВКЛ = true, ВЫКЛ = false)
+      adminRightsActive: true, // Переключатель админ-прав для @max
+      feedTab: 'all',       // 'all' | 'subscriptions'
+      searchQuery: '',      // Поиск по содержанию постов
+      filters: {
+        open: false,
+        period: 'all',      // 'today' | 'week' | 'month' | 'year' | 'all'
+        sort: 'newest',     // 'best' | 'newest' | 'views' | 'likes' | 'comments'
+        type: 'all'         // 'all' | 'image' | 'video' | 'audio' | 'album' | 'text'
+      },
+      activeTagFilter: null,
+      interests: {},
+      activity: {
+        lastPostAt: 0,
+        postTimestamps: [],
+        commentTimestamps: []
+      },
+      pendingCaptchaAction: null,
+      captchaExpectedAnswer: null,
+      route: { name: 'feed', param: null },
+      draft: {
+        title: '',
+        content: '',
+        mediaType: 'text',
+        imageDataUrl: '',
+        mediaUrlInput: ''
+      },
+      isPublishing: false
+    };
+
+    function readLocal(key, fallback) {
+      try {
+        const raw = localStorage.getItem(key);
+        return raw ? JSON.parse(raw) : fallback;
+      } catch (e) {
+        return fallback;
+      }
+    }
+
+    function writeLocal(key, value) {
+      try {
+        localStorage.setItem(key, JSON.stringify(value));
+        return true;
+      } catch (e) {
+        return false;
+      }
+    }
+
+    function loadFromLocalStorage() {
+      state.usersMap = readLocal(LS_KEYS.USERS, {});
+      state.posts = readLocal(LS_KEYS.POSTS, []);
+      state.comments = readLocal(LS_KEYS.COMMENTS, []);
+      state.interests = readLocal(LS_KEYS.INTERESTS, {});
+      state.bans = readLocal(LS_KEYS.BANS, {});
+      state.supportThreads = readLocal(LS_KEYS.SUPPORT, {});
+      state.activity = readLocal(LS_KEYS.ACTIVITY, {
+        lastPostAt: 0,
+        postTimestamps: [],
+        commentTimestamps: []
+      });
+
+      const savedMaint = readLocal(LS_KEYS.MAINTENANCE, null);
+      if (savedMaint !== null && typeof savedMaint.siteEnabled === 'boolean') {
+        state.siteEnabled = savedMaint.siteEnabled;
+      }
+
+      const savedUid = localStorage.getItem(LS_KEYS.SESSION);
+      if (savedUid && state.usersMap[savedUid]) {
+        state.currentUser = state.usersMap[savedUid];
+      } else {
+        state.currentUser = null;
+      }
+    }
+
+    function isUserAdmin() {
+      if (!state.currentUser) return false;
+      const nick = normalizeNick(state.currentUser.nick || state.currentUser.handle || state.currentUser.name);
+      return nick === 'max' && state.adminRightsActive;
+    }
+
+    function isAccountMax() {
+      if (!state.currentUser) return false;
+      const nick = normalizeNick(state.currentUser.nick || state.currentUser.handle || state.currentUser.name);
+      return nick === 'max';
+    }
+
+    const StorageAdapter = {
+      async saveUser(userObj) {
+        state.usersMap[userObj.uid] = userObj;
+        writeLocal(LS_KEYS.USERS, state.usersMap);
+        if (fbDb) {
+          try {
+            await setDoc(doc(fbDb, 'trusiki_users', userObj.uid), userObj, { merge: true });
+          } catch (e) {}
+        }
+      },
+
+      async updateUserFields(uid, partialData) {
+        if (!state.usersMap[uid]) return;
+        state.usersMap[uid] = { ...state.usersMap[uid], ...partialData };
+        writeLocal(LS_KEYS.USERS, state.usersMap);
+        if (state.currentUser && state.currentUser.uid === uid) {
+          state.currentUser = state.usersMap[uid];
+        }
+        if (fbDb) {
+          try {
+            await setDoc(doc(fbDb, 'trusiki_users', uid), partialData, { merge: true });
+          } catch (e) {}
+        }
+      },
+
+      async savePost(postObj) {
+        const idx = state.posts.findIndex(p => p.slug === postObj.slug);
+        if (idx >= 0) {
+          state.posts[idx] = postObj;
+        } else {
+          state.posts.unshift(postObj);
+        }
+        const ok = writeLocal(LS_KEYS.POSTS, state.posts);
+        if (!ok) {
+          if (idx < 0) state.posts.shift();
+          throw new Error("Недостаточно памяти в браузере для такого большого файла.");
+        }
+        if (fbDb) {
+          try {
+            await setDoc(doc(fbDb, 'trusiki_posts', postObj.slug), postObj, { merge: true });
+          } catch (e) {}
+        }
+      },
+
+      async deletePostAndComments(postSlug) {
+        state.posts = state.posts.filter(p => p.slug !== postSlug);
+        state.comments = state.comments.filter(c => c.postSlug !== postSlug);
+        writeLocal(LS_KEYS.POSTS, state.posts);
+        writeLocal(LS_KEYS.COMMENTS, state.comments);
+        if (fbDb) {
+          try {
+            await deleteDoc(doc(fbDb, 'trusiki_posts', postSlug));
+          } catch (e) {}
+        }
+      },
+
+      async saveComment(commentObj) {
+        state.comments.push(commentObj);
+        writeLocal(LS_KEYS.COMMENTS, state.comments);
+        if (fbDb) {
+          try {
+            await setDoc(doc(fbDb, 'trusiki_comments', commentObj.id), commentObj, { merge: true });
+          } catch (e) {}
+        }
+      },
+
+      async deleteComment(commentId) {
+        state.comments = state.comments.filter(c => c.id !== commentId);
+        writeLocal(LS_KEYS.COMMENTS, state.comments);
+        if (fbDb) {
+          try {
+            await deleteDoc(doc(fbDb, 'trusiki_comments', commentId));
+          } catch (e) {}
+        }
+      },
+
+      async saveMaintenanceState(enabled) {
+        state.siteEnabled = enabled;
+        writeLocal(LS_KEYS.MAINTENANCE, { siteEnabled: enabled, updatedAt: Date.now() });
+        if (fbDb) {
+          try {
+            await setDoc(doc(fbDb, 'trusiki_config', 'site_status'), { siteEnabled: enabled, updatedAt: Date.now() }, { merge: true });
+          } catch (e) {}
+        }
+      },
+
+      async saveBanRecord(normNick, banObj) {
+        if (banObj) {
+          state.bans[normNick] = banObj;
+        } else {
+          delete state.bans[normNick];
+        }
+        writeLocal(LS_KEYS.BANS, state.bans);
+        if (fbDb) {
+          try {
+            if (banObj) {
+              await setDoc(doc(fbDb, 'trusiki_bans', normNick), banObj, { merge: true });
+            } else {
+              await deleteDoc(doc(fbDb, 'trusiki_bans', normNick));
+            }
+          } catch (e) {}
+        }
+      },
+
+      async saveSupportThread(userKey, threadObj) {
+        state.supportThreads[userKey] = threadObj;
+        writeLocal(LS_KEYS.SUPPORT, state.supportThreads);
+        if (fbDb) {
+          try {
+            await setDoc(doc(fbDb, 'trusiki_support', userKey), threadObj, { merge: true });
+          } catch (e) {}
+        }
+      }
+    };
+
+    function initCloudListeners() {
+      if (!fbDb) return;
+
+      onSnapshot(doc(fbDb, 'trusiki_config', 'site_status'), (snap) => {
+        if (snap.exists() && typeof snap.data().siteEnabled === 'boolean') {
+          state.siteEnabled = snap.data().siteEnabled;
+          writeLocal(LS_KEYS.MAINTENANCE, { siteEnabled: state.siteEnabled });
+          renderApp();
+        }
+      });
+
+      onSnapshot(collection(fbDb, 'trusiki_users'), (snap) => {
+        snap.forEach(d => {
+          state.usersMap[d.id] = { uid: d.id, ...d.data() };
+        });
+        writeLocal(LS_KEYS.USERS, state.usersMap);
+        if (state.currentUser && state.usersMap[state.currentUser.uid]) {
+          state.currentUser = state.usersMap[state.currentUser.uid];
+        }
+        renderApp();
+      });
+
+      onSnapshot(collection(fbDb, 'trusiki_posts'), (snap) => {
+        const list = [];
+        snap.forEach(d => list.push({ slug: d.id, ...d.data() }));
+        state.posts = list;
+        writeLocal(LS_KEYS.POSTS, state.posts);
+        renderApp();
+      });
+
+      onSnapshot(collection(fbDb, 'trusiki_comments'), (snap) => {
+        const list = [];
+        snap.forEach(d => list.push({ id: d.id, ...d.data() }));
+        list.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+        state.comments = list;
+        writeLocal(LS_KEYS.COMMENTS, state.comments);
+        renderApp();
+      });
+
+      onSnapshot(collection(fbDb, 'trusiki_bans'), (snap) => {
+        const map = {};
+        snap.forEach(d => { map[d.id] = d.data(); });
+        state.bans = map;
+        writeLocal(LS_KEYS.BANS, state.bans);
+        renderApp();
+      });
+
+      onSnapshot(collection(fbDb, 'trusiki_support'), (snap) => {
+        const map = {};
+        snap.forEach(d => { map[d.id] = d.data(); });
+        state.supportThreads = map;
+        writeLocal(LS_KEYS.SUPPORT, state.supportThreads);
+        renderSupportUI();
+      });
+    }
+
+    // =========================================================================
+    // 2. УТИЛИТЫ, БАНЫ И АНТИСПАМ (КУЛДАУН 1 МИН + КАПЧА)
+    // =========================================================================
+    function generatePostSlug(length = 12) {
+      const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+      let result = '';
+      for (let i = 0; i < length; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      return result;
+    }
+
+    function normalizeNick(nick) {
+      return String(nick || '').trim().toLowerCase().replace(/^@+/, '');
+    }
+
+    function formatRelativeTime(timestamp) {
+      if (!timestamp) return 'только что';
+      const diff = Math.floor((Date.now() - timestamp) / 1000);
+      if (diff < 60) return 'только что';
+      if (diff < 3600) return `${Math.floor(diff / 60)} мин. назад`;
+      if (diff < 86400) return `${Math.floor(diff / 3600)} ч. назад`;
+      return new Date(timestamp).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function getActiveBanForUser(userObj) {
+      if (!userObj) return null;
+      const normNick = normalizeNick(userObj.nick || userObj.handle || userObj.name);
+      if (normNick === 'max') return null;
+      const ban = state.bans[normNick];
+      if (!ban) return null;
+      if (ban.expiresAt && ban.expiresAt !== 'perm' && Date.now() > ban.expiresAt) {
+        StorageAdapter.saveBanRecord(normNick, null);
+        return null;
+      }
+      return ban;
+    }
+
+    function formatBanDuration(ban) {
+      if (!ban) return '';
+      if (ban.expiresAt === 'perm' || ban.durationCode === 'perm') return 'Навсегда';
+      const remainingMs = Math.max(0, ban.expiresAt - Date.now());
+      const mins = Math.ceil(remainingMs / 60000);
+      if (mins < 60) return `Осталось ${mins} мин.`;
+      const hours = Math.ceil(mins / 60);
+      if (hours < 48) return `Осталось ${hours} ч.`;
+      const days = Math.ceil(hours / 24);
+      return `Осталось ${days} дн.`;
+    }
+
+    function computeBanExpiry(durationCode) {
+      const now = Date.now();
+      if (durationCode === '1h') return now + 3600 * 1000;
+      if (durationCode === '24h') return now + 24 * 3600 * 1000;
+      if (durationCode === '7d') return now + 7 * 24 * 3600 * 1000;
+      if (durationCode === '30d') return now + 30 * 24 * 3600 * 1000;
+      return 'perm';
+    }
+
+    function cleanOldTimestamps(arr, windowMs = 3600 * 1000) {
+      const cutoff = Date.now() - windowMs;
+      return (arr || []).filter(ts => ts > cutoff);
+    }
+
+    function openCaptcha(reasonText, onSuccessCallback) {
+      const a = Math.floor(Math.random() * 8) + 2;
+      const b = Math.floor(Math.random() * 8) + 2;
+      state.captchaExpectedAnswer = a + b;
+      state.pendingCaptchaAction = onSuccessCallback;
+
+      document.getElementById('captcha-reason-text').textContent = reasonText;
+      document.getElementById('captcha-question').textContent = `${a} + ${b} = ?`;
+      document.getElementById('captcha-answer-input').value = '';
+      document.getElementById('captcha-error-msg').classList.add('hidden');
+      document.getElementById('captcha-modal').classList.remove('hidden');
+      document.getElementById('captcha-answer-input').focus();
+    }
+
+    window.closeCaptchaModal = function() {
+      document.getElementById('captcha-modal').classList.add('hidden');
+      state.pendingCaptchaAction = null;
+      state.captchaExpectedAnswer = null;
+    };
+
+    window.verifyCaptcha = function(event) {
+      event.preventDefault();
+      const val = parseInt(document.getElementById('captcha-answer-input').value, 10);
+      if (val !== state.captchaExpectedAnswer) {
+        document.getElementById('captcha-error-msg').classList.remove('hidden');
+        return;
+      }
+      const action = state.pendingCaptchaAction;
+      closeCaptchaModal();
+      if (typeof action === 'function') {
+        action();
+      }
+    };
+
+    function extractTokensFromPost(post) {
+      const fullText = `${post.title || ''} ${post.content || ''}`.toLowerCase();
+      const hashtags = (fullText.match(/#[a-zа-яё0-9_]{2,30}/gi) || []).map(t => t.slice(1));
+      const words = (fullText.match(/[a-zа-яё0-9]{4,24}/gi) || []).filter(w => !hashtags.includes(w));
+      return { hashtags: [...new Set(hashtags)], words: [...new Set(words)] };
+    }
+
+    function recordPostInteraction(post, weight = 1) {
+      if (!post) return;
+      const { hashtags, words } = extractTokensFromPost(post);
+      hashtags.forEach(tag => {
+        state.interests[tag] = (state.interests[tag] || 0) + weight * 3;
+      });
+      words.slice(0, 8).forEach(word => {
+        state.interests[word] = (state.interests[word] || 0) + weight;
+      });
+      writeLocal(LS_KEYS.INTERESTS, state.interests);
+    }
+
+    window.onHashtagClick = function(event, tag) {
+      if (event) event.stopPropagation();
+      const cleanTag = tag.toLowerCase().replace(/^#/, '');
+      state.interests[cleanTag] = (state.interests[cleanTag] || 0) + 4;
+      writeLocal(LS_KEYS.INTERESTS, state.interests);
+      state.activeTagFilter = state.activeTagFilter === cleanTag ? null : cleanTag;
+      if (state.route.name !== 'feed') {
+        navigate(null, '/');
+      } else {
+        renderApp();
+      }
+    };
+
+    function formatPostTextWithTags(text) {
+      const escaped = escapeHtml(text);
+      return escaped.replace(/(^|\s)(#[a-zA-Zа-яА-ЯёЁ0-9_]{2,30})/g, (match, space, tag) => {
+        const cleanTag = tag.slice(1).toLowerCase();
+        return `${space}<button type="button" onclick="onHashtagClick(event, '${cleanTag}')" class="text-sky-400 hover:text-sky-300 hover:underline font-medium cursor-pointer">${tag}</button>`;
+      });
+    }
+
+    window.showToast = function(message, type = 'info') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      const borderClass = type === 'error' ? 'border-red-500/40 text-red-200' : 'border-[#2E2E2E] text-white';
+      toast.className = `px-4 py-2.5 rounded-xl bg-[#141414] border ${borderClass} text-xs font-medium shadow-2xl animate-fade-in`;
+      toast.textContent = message;
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transition = 'opacity 0.2s ease';
+        setTimeout(() => toast.remove(), 200);
+      }, 2800);
+    };
+
+    // =========================================================================
+    // 3. МАРШРУТИЗАЦИЯ: /@ник ДЛЯ ПРОФИЛЯ, ДЛИННЫЕ ID ТОЛЬКО ДЛЯ ПОСТОВ
+    // =========================================================================
+    function parseCurrentUrl() {
+      let path = window.location.pathname;
+      if (window.location.hash && window.location.hash.startsWith('#/')) {
+        path = window.location.hash.slice(1);
+      }
+
+      if (path === '/new') {
+        return { name: 'new', param: null };
+      }
+      if (path.startsWith('/p/')) {
+        const slug = decodeURIComponent(path.slice(3)).trim();
+        if (slug) return { name: 'post', param: slug };
+      }
+      if (path.startsWith('/@')) {
+        const nick = normalizeNick(decodeURIComponent(path.slice(2)));
+        if (nick) return { name: 'profile', param: nick };
+      }
+      return { name: 'feed', param: null };
+    }
+
+    window.navigate = function(event, targetPath) {
+      if (event) event.preventDefault();
+      try {
+        window.history.pushState({}, '', targetPath);
+      } catch (e) {
+        window.location.hash = targetPath;
+      }
+      state.route = parseCurrentUrl();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      renderApp();
+    };
+
+    window.openUserProfileByNick = function(event, nickOrUid) {
+      if (event) event.stopPropagation();
+      const found = Object.values(state.usersMap).find(
+        u => u.uid === nickOrUid || normalizeNick(u.nick || u.handle || u.name) === normalizeNick(nickOrUid)
+      );
+      const cleanNick = found
+        ? normalizeNick(found.nick || found.handle || found.name)
+        : normalizeNick(nickOrUid);
+      navigate(null, `/@${encodeURIComponent(cleanNick)}`);
+    };
+
+    window.openPostDetail = async function(slug) {
+      const idx = state.posts.findIndex(p => p.slug === slug);
+      if (idx >= 0) {
+        const updated = { ...state.posts[idx], views: (state.posts[idx].views || 0) + 1 };
+        state.posts[idx] = updated;
+        writeLocal(LS_KEYS.POSTS, state.posts);
+        recordPostInteraction(updated, 2);
+        if (fbDb) {
+          try {
+            await setDoc(doc(fbDb, 'trusiki_posts', slug), { views: updated.views }, { merge: true });
+          } catch (e) {}
+        }
+      }
+      navigate(null, `/p/${encodeURIComponent(slug)}`);
+    };
+
+    window.addEventListener('popstate', () => {
+      state.route = parseCurrentUrl();
+      renderApp();
+    });
+
+    // =========================================================================
+    // 4. АВТОРИЗАЦИЯ (GOOGLE + НИК И ПАРОЛЬ)
+    // =========================================================================
+    function setLoggedInSession(userObj) {
+      state.currentUser = userObj;
+      localStorage.setItem(LS_KEYS.SESSION, userObj.uid);
+      updateHeaderUI();
+    }
+
+    window.loginWithCredentials = async function(event) {
+      event.preventDefault();
+      const nickInput = document.getElementById('auth-nick-input');
+      const passInput = document.getElementById('auth-pass-input');
+      const errorEl = document.getElementById('auth-error-msg');
+      errorEl.classList.add('hidden');
+
+      const rawNick = nickInput.value.trim();
+      const password = passInput.value;
+      const normNick = normalizeNick(rawNick);
+
+      if (!normNick) {
+        errorEl.textContent = 'Введите корректный никнейм.';
+        errorEl.classList.remove('hidden');
+        return;
+      }
+
+      const existingUser = Object.values(state.usersMap).find(
+        u => normalizeNick(u.nick || u.handle || u.name) === normNick
+      );
+
+      if (existingUser) {
+        if (existingUser.password !== password) {
+          errorEl.textContent = 'Неверный пароль для этого ника.';
+          errorEl.classList.remove('hidden');
+          return;
+        }
+        setLoggedInSession(existingUser);
+        nickInput.value = '';
+        passInput.value = '';
+        closeAuthModal();
+        showToast(`Вход выполнен: ${existingUser.name}`);
+        renderApp();
+      } else {
+        const uid = 'u_' + normNick + '_' + generatePostSlug(6);
+        const newUser = {
+          uid,
+          name: rawNick.replace(/^@+/, ''),
+          nick: normNick,
+          handle: '@' + normNick,
+          password,
+          googleUid: null,
+          avatar: '',
+          bio: '',
+          following: [],
+          followers: [],
+          notInterested: [],
+          createdAt: Date.now()
+        };
+        await StorageAdapter.saveUser(newUser);
+        setLoggedInSession(newUser);
+        nickInput.value = '';
+        passInput.value = '';
+        closeAuthModal();
+        showToast(`Аккаунт @${normNick} создан!`);
+        renderApp();
+      }
+    };
+
+    window.loginWithGoogle = async function() {
+      const errorEl = document.getElementById('auth-error-msg');
+      errorEl.classList.add('hidden');
+
+      if (!fbAuth) {
+        errorEl.textContent = "Firebase Auth не инициализирован.";
+        errorEl.classList.remove('hidden');
+        return;
+      }
+
+      const btn = document.getElementById('btn-google-login');
+      const origHtml = btn.innerHTML;
+      btn.innerHTML = `<span class="text-xs">Вход через Google...</span>`;
+      btn.disabled = true;
+
+      try {
+        const provider = new GoogleAuthProvider();
+        provider.setCustomParameters({ prompt: 'select_account' });
+        const result = await signInWithPopup(fbAuth, provider);
+        const gUser = result.user;
+
+        let linkedUser = Object.values(state.usersMap).find(u => u.googleUid === gUser.uid);
+
+        if (!linkedUser && fbDb) {
+          try {
+            const snap = await getDoc(doc(fbDb, 'trusiki_users', 'g_' + gUser.uid));
+            if (snap.exists()) {
+              linkedUser = { uid: snap.id, ...snap.data() };
+              state.usersMap[linkedUser.uid] = linkedUser;
+              writeLocal(LS_KEYS.USERS, state.usersMap);
+            }
+          } catch (e) {}
+        }
+
+        if (linkedUser) {
+          setLoggedInSession(linkedUser);
+          closeAuthModal();
+          showToast(`С возвращением, ${linkedUser.name}!`);
+          renderApp();
+        } else {
+          state.pendingGoogleUser = {
+            googleUid: gUser.uid,
+            email: gUser.email || '',
+            photoURL: gUser.photoURL || '',
+            suggestedName: (gUser.email ? gUser.email.split('@')[0] : '').replace(/[^a-zA-Z0-9_]/g, '')
+          };
+          document.getElementById('auth-step-main').classList.add('hidden');
+          document.getElementById('auth-step-google-setup').classList.remove('hidden');
+          document.getElementById('google-setup-nick').value = state.pendingGoogleUser.suggestedName;
+          document.getElementById('google-setup-nick').focus();
+        }
+      } catch (err) {
+        console.error(err);
+        errorEl.textContent = "Окно входа Google закрыто или Google OAuth не включён в Firebase.";
+        errorEl.classList.remove('hidden');
+      } finally {
+        btn.innerHTML = origHtml;
+        btn.disabled = false;
+      }
+    };
+
+    window.completeGoogleRegistration = async function(event) {
+      event.preventDefault();
+      if (!state.pendingGoogleUser) return;
+
+      const nickEl = document.getElementById('google-setup-nick');
+      const passEl = document.getElementById('google-setup-pass');
+      const errEl = document.getElementById('google-setup-error');
+      errEl.classList.add('hidden');
+
+      const normNick = normalizeNick(nickEl.value);
+      const password = passEl.value;
+
+      if (!normNick) {
+        errEl.textContent = 'Введите никнейм.';
+        errEl.classList.remove('hidden');
+        return;
+      }
+      if (password.length < 3) {
+        errEl.textContent = 'Пароль должен быть не короче 3 символов.';
+        errEl.classList.remove('hidden');
+        return;
+      }
+
+      const taken = Object.values(state.usersMap).some(
+        u => normalizeNick(u.nick || u.handle || u.name) === normNick
+      );
+      if (taken) {
+        errEl.textContent = 'Этот ник уже занят.';
+        errEl.classList.remove('hidden');
+        return;
+      }
+
+      const uid = 'g_' + state.pendingGoogleUser.googleUid;
+      const newUser = {
+        uid,
+        name: nickEl.value.trim().replace(/^@+/, ''),
+        nick: normNick,
+        handle: '@' + normNick,
+        password,
+        googleUid: state.pendingGoogleUser.googleUid,
+        avatar: state.pendingGoogleUser.photoURL || '',
+        bio: '',
+        following: [],
+        followers: [],
+        notInterested: [],
+        createdAt: Date.now()
+      };
+
+      await StorageAdapter.saveUser(newUser);
+      setLoggedInSession(newUser);
+      state.pendingGoogleUser = null;
+      nickEl.value = '';
+      passEl.value = '';
+      closeAuthModal();
+      showToast(`Профиль @${normNick} готов!`);
+      renderApp();
+    };
+
+    window.logoutUser = async function() {
+      closeUserDropdown();
+      state.currentUser = null;
+      localStorage.removeItem(LS_KEYS.SESSION);
+      if (fbAuth) {
+        try { await signOut(fbAuth); } catch (e) {}
+      }
+      updateHeaderUI();
+      showToast('Вы вышли из аккаунта');
+      renderApp();
+    };
+
+    window.logoutBannedUser = async function() {
+      document.getElementById('ban-screen').classList.add('hidden');
+      await logoutUser();
+    };
+
+    // =========================================================================
+    // 5. АДМИН-ФУНКЦИИ (@max), ЗАКРЕПЛЕНИЕ, УДАЛЕНИЕ, БАНЫ И ПОДДЕРЖКА
+    // =========================================================================
+    window.toggleAdminRights = function(event) {
+      if (event) event.stopPropagation();
+      if (!isAccountMax()) return;
+      state.adminRightsActive = !state.adminRightsActive;
+      updateHeaderUI();
+      showToast(state.adminRightsActive ? 'Админ права включены' : 'Админ права выключены');
+      renderApp();
+    };
+
+    window.togglePinPost = async function(event, postSlug) {
+      if (event) event.stopPropagation();
+      if (!isUserAdmin()) return;
+      const post = state.posts.find(p => p.slug === postSlug);
+      if (!post) return;
+      const updated = { ...post, pinned: !post.pinned };
+      await StorageAdapter.savePost(updated);
+      showToast(updated.pinned ? 'Пост закреплён' : 'Пост откреплён');
+      renderApp();
+    };
+
+    window.deletePostAction = async function(event, postSlug) {
+      if (event) event.stopPropagation();
+      const post = state.posts.find(p => p.slug === postSlug);
+      if (!post || !state.currentUser) return;
+      const isOwner = post.authorId === state.currentUser.uid;
+      if (!isOwner && !isUserAdmin()) {
+        showToast('Нет прав на удаление этого поста', 'error');
+        return;
+      }
+      await StorageAdapter.deletePostAndComments(postSlug);
+      showToast('Пост и его комментарии удалены');
+      if (state.route.name === 'post' && state.route.param === postSlug) {
+        navigate(null, '/');
+      } else {
+        renderApp();
+      }
+    };
+
+    window.deleteCommentAction = async function(event, commentId) {
+      if (event) event.stopPropagation();
+      const comment = state.comments.find(c => c.id === commentId);
+      if (!comment || !state.currentUser) return;
+      const isOwner = comment.authorId === state.currentUser.uid;
+      if (!isOwner && !isUserAdmin()) return;
+      await StorageAdapter.deleteComment(commentId);
+      showToast('Комментарий удалён');
+      renderApp();
+    };
+
+    window.openAdminPanelModal = function() {
+      if (!isAccountMax()) return;
+      switchAdminTab('general');
+      renderAdminGeneralSection();
+      renderSupportUI();
+      document.getElementById('admin-panel-modal').classList.remove('hidden');
+    };
+
+    window.closeAdminPanelModal = function() {
+      document.getElementById('admin-panel-modal').classList.add('hidden');
+    };
+
+    window.switchAdminTab = function(tabName) {
+      const genBtn = document.getElementById('admin-tab-general');
+      const supBtn = document.getElementById('admin-tab-support');
+      const genSec = document.getElementById('admin-section-general');
+      const supSec = document.getElementById('admin-section-support');
+
+      if (tabName === 'support') {
+        supBtn.className = 'px-3.5 py-2 rounded-t-xl text-xs font-medium bg-white text-black cursor-pointer flex items-center gap-1.5';
+        genBtn.className = 'px-3.5 py-2 rounded-t-xl text-xs font-medium text-textSecondary hover:text-white cursor-pointer';
+        genSec.classList.add('hidden');
+        supSec.classList.remove('hidden');
+        renderSupportUI();
+      } else {
+        genBtn.className = 'px-3.5 py-2 rounded-t-xl text-xs font-medium bg-white text-black cursor-pointer';
+        supBtn.className = 'px-3.5 py-2 rounded-t-xl text-xs font-medium text-textSecondary hover:text-white cursor-pointer flex items-center gap-1.5';
+        supSec.classList.add('hidden');
+        genSec.classList.remove('hidden');
+        renderAdminGeneralSection();
+      }
+    };
+
+    window.toggleSiteMaintenance = async function() {
+      if (!isAccountMax()) return;
+      await StorageAdapter.saveMaintenanceState(!state.siteEnabled);
+      renderAdminGeneralSection();
+      renderApp();
+      showToast(state.siteEnabled ? 'Сайт ВКЛЮЧЁН для всех' : 'Сайт ВЫКЛЮЧЕН для всех (кроме @max)');
+    };
+
+    function renderAdminGeneralSection() {
+      const label = document.getElementById('site-status-label');
+      const check = document.getElementById('site-enabled-checkbox');
+      if (state.siteEnabled) {
+        label.textContent = 'ВКЛ';
+        label.className = 'text-emerald-400';
+        check.textContent = '✓';
+        check.className = 'w-4 h-4 rounded border border-white bg-white text-black flex items-center justify-center text-[11px] font-bold';
+      } else {
+        label.textContent = 'ВЫКЛ';
+        label.className = 'text-red-400';
+        check.textContent = '';
+        check.className = 'w-4 h-4 rounded border border-neutral-500 bg-transparent text-black flex items-center justify-center text-[11px] font-bold';
+      }
+      renderBansList();
+    }
+
+    window.submitBanUser = async function(event) {
+      event.preventDefault();
+      if (!isAccountMax()) return;
+
+      const nickInput = document.getElementById('ban-nick-input');
+      const reasonInput = document.getElementById('ban-reason-input');
+      const durSelect = document.getElementById('ban-duration-select');
+
+      const normNick = normalizeNick(nickInput.value);
+      if (!normNick || normNick === 'max') {
+        showToast('Нельзя забанить @max или пустой ник', 'error');
+        return;
+      }
+
+      const durationCode = durSelect.value;
+      const banRecord = {
+        nick: normNick,
+        reason: reasonInput.value.trim() || 'Нарушение правил',
+        durationCode,
+        expiresAt: computeBanExpiry(durationCode),
+        updatedAt: Date.now()
+      };
+
+      await StorageAdapter.saveBanRecord(normNick, banRecord);
+      nickInput.value = '';
+      reasonInput.value = '';
+      renderBansList();
+      showToast(`Пользователь @${normNick} забанен`);
+    };
+
+    window.updateBanDuration = async function(normNick, newCode) {
+      if (!isAccountMax() || !state.bans[normNick]) return;
+      const updated = {
+        ...state.bans[normNick],
+        durationCode: newCode,
+        expiresAt: computeBanExpiry(newCode),
+        updatedAt: Date.now()
+      };
+      await StorageAdapter.saveBanRecord(normNick, updated);
+      renderBansList();
+      showToast(`Срок бана для @${normNick} обновлён`);
+    };
+
+    window.unbanUser = async function(normNick) {
+      if (!isAccountMax()) return;
+      await StorageAdapter.saveBanRecord(normNick, null);
+      renderBansList();
+      showToast(`Пользователь @${normNick} разбанен`);
+    };
+
+    window.renderBansList = function() {
+      const container = document.getElementById('bans-list-container');
+      if (!container) return;
+      const q = (document.getElementById('ban-search-input')?.value || '').trim().toLowerCase();
+
+      const list = Object.values(state.bans).filter(b => {
+        if (!q) return true;
+        return b.nick.toLowerCase().includes(q) || (b.reason || '').toLowerCase().includes(q);
+      });
+
+      if (list.length === 0) {
+        container.innerHTML = `<div class="p-4 rounded-xl bg-[#131313] border border-borderSubtle text-xs text-textSecondary text-center">Забаненных пользователей нет</div>`;
+        return;
+      }
+
+      container.innerHTML = list.map(b => `
+        <div class="p-3.5 rounded-xl bg-[#131313] border border-borderSubtle flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div class="min-w-0">
+            <p class="text-xs font-semibold text-white">@${escapeHtml(b.nick)} <span class="text-amber-300 font-normal ml-1">(${escapeHtml(formatBanDuration(b))})</span></p>
+            <p class="text-xs text-textSecondary mt-0.5 break-words">Причина: ${escapeHtml(b.reason)}</p>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            <select onchange="updateBanDuration('${escapeHtml(b.nick)}', this.value)"
+                    class="bg-[#0B0B0B] border border-borderSubtle rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none">
+              <option value="1h" ${b.durationCode === '1h' ? 'selected' : ''}>1 час</option>
+              <option value="24h" ${b.durationCode === '24h' ? 'selected' : ''}>24 часа</option>
+              <option value="7d" ${b.durationCode === '7d' ? 'selected' : ''}>7 дней</option>
+              <option value="30d" ${b.durationCode === '30d' ? 'selected' : ''}>30 дней</option>
+              <option value="perm" ${b.durationCode === 'perm' ? 'selected' : ''}>Навсегда</option>
+            </select>
+            <button onclick="unbanUser('${escapeHtml(b.nick)}')"
+                    class="px-3 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 text-xs font-medium cursor-pointer">
+              Разбанить
+            </button>
+          </div>
+        </div>
+      `).join('');
+    };
+
+    // Поддержка: у каждого пользователя свой чат; у админа появляется только после первого сообщения пользователя
+    function getSupportUserKey() {
+      if (!state.currentUser) return 'guest';
+      return normalizeNick(state.currentUser.nick || state.currentUser.handle || state.currentUser.uid);
+    }
+
+    window.openSupportModal = function() {
+      renderUserSupportChat();
+      document.getElementById('support-modal').classList.remove('hidden');
+    };
+
+    window.closeSupportModal = function() {
+      document.getElementById('support-modal').classList.add('hidden');
+    };
+
+    function renderUserSupportChat() {
+      const key = getSupportUserKey();
+      const thread = state.supportThreads[key];
+      const box = document.getElementById('user-support-messages');
+      if (!box) return;
+
+      const msgs = thread?.messages || [];
+      if (msgs.length === 0) {
+        box.innerHTML = `<p class="text-xs text-textSecondary text-center py-8">Напишите сообщение, чтобы начать диалог с поддержкой.</p>`;
+        return;
+      }
+
+      box.innerHTML = msgs.map(m => {
+        const isFromAdmin = m.sender === 'admin';
+        return `
+          <div class="flex flex-col ${isFromAdmin ? 'items-start' : 'items-end'}">
+            <div class="max-w-[82%] px-3.5 py-2 rounded-2xl text-xs ${isFromAdmin ? 'bg-[#191919] text-white border border-borderSubtle' : 'bg-white text-black font-medium'}">
+              ${escapeHtml(m.text)}
+            </div>
+            <span class="text-[10px] text-textMuted mt-0.5">${isFromAdmin ? 'Поддержка' : 'Вы'} • ${formatRelativeTime(m.createdAt)}</span>
+          </div>
+        `;
+      }).join('');
+      box.scrollTop = box.scrollHeight;
+    }
+
+    window.sendUserSupportMessage = async function(event) {
+      event.preventDefault();
+      const input = document.getElementById('user-support-input');
+      const text = input.value.trim();
+      if (!text) return;
+
+      const key = getSupportUserKey();
+      const nick = state.currentUser ? normalizeNick(state.currentUser.nick || state.currentUser.handle || state.currentUser.name) : 'guest';
+      const name = state.currentUser?.name || 'Пользователь';
+
+      const currentThread = state.supportThreads[key] || {
+        userKey: key,
+        nick,
+        name,
+        startedByUser: true,
+        messages: []
+      };
+
+      currentThread.startedByUser = true;
+      currentThread.messages.push({
+        sender: 'user',
+        text,
+        createdAt: Date.now()
+      });
+
+      await StorageAdapter.saveSupportThread(key, currentThread);
+      input.value = '';
+      renderUserSupportChat();
+      renderSupportUI();
+      showToast('Сообщение отправлено в поддержку');
+    };
+
+    window.sendAdminSupportReply = async function(event, userKey) {
+      event.preventDefault();
+      if (!isAccountMax()) return;
+      const input = document.getElementById(`admin-reply-${userKey}`);
+      const text = input.value.trim();
+      if (!text) return;
+
+      const thread = state.supportThreads[userKey];
+      if (!thread) return;
+
+      thread.messages.push({
+        sender: 'admin',
+        text,
+        createdAt: Date.now()
+      });
+
+      await StorageAdapter.saveSupportThread(userKey, thread);
+      input.value = '';
+      renderSupportUI();
+      renderUserSupportChat();
+    };
+
+    function renderSupportUI() {
+      // Показываем в списке поддержки только чаты, где пользователь написал хотя бы одно сообщение
+      const activeThreads = Object.values(state.supportThreads).filter(
+        t => t.startedByUser && Array.isArray(t.messages) && t.messages.some(m => m.sender === 'user')
+      );
+
+      const countEl = document.getElementById('admin-support-count');
+      const badgeEl = document.getElementById('admin-support-badge');
+      if (countEl) countEl.textContent = String(activeThreads.length);
+      if (badgeEl) {
+        if (activeThreads.length > 0) badgeEl.classList.remove('hidden');
+        else badgeEl.classList.add('hidden');
+      }
+
+      const container = document.getElementById('admin-support-threads');
+      if (!container) return;
+
+      if (activeThreads.length === 0) {
+        container.innerHTML = `<div class="p-6 rounded-xl bg-[#131313] border border-borderSubtle text-xs text-textSecondary text-center">Обращений в поддержку пока нет. Чаты появятся здесь после первого сообщения пользователя.</div>`;
+        return;
+      }
+
+      container.innerHTML = activeThreads.map(t => `
+        <div class="p-4 rounded-2xl bg-[#131313] border border-borderSubtle space-y-3">
+          <div class="flex items-center justify-between border-b border-borderSubtle pb-2">
+            <span class="text-xs font-semibold text-white">${escapeHtml(t.name)} <span class="text-textSecondary font-normal">@${escapeHtml(t.nick)}</span></span>
+          </div>
+          <div class="space-y-2 max-h-40 overflow-y-auto">
+            ${t.messages.map(m => `
+              <div class="text-xs ${m.sender === 'admin' ? 'text-emerald-300' : 'text-white'}">
+                <span class="font-semibold">${m.sender === 'admin' ? 'Вы (@max):' : '@' + escapeHtml(t.nick) + ':'}</span>
+                <span>${escapeHtml(m.text)}</span>
+              </div>
+            `).join('')}
+          </div>
+          <form onsubmit="sendAdminSupportReply(event, '${escapeHtml(t.userKey)}')" class="flex gap-2 pt-1">
+            <input id="admin-reply-${escapeHtml(t.userKey)}" type="text" required placeholder="Ответить пользователю..."
+                   class="flex-1 bg-[#0B0B0B] border border-borderSubtle rounded-xl px-3 py-1.5 text-xs text-white placeholder-textMuted focus:outline-none" />
+            <button type="submit" class="px-3.5 py-1.5 rounded-xl bg-white text-black text-xs font-semibold cursor-pointer">
+              Ответить
+            </button>
+          </form>
+        </div>
+      `).join('');
+    }
+
+    // =========================================================================
+    // 6. СОЗДАНИЕ ПОСТА, ЛАЙКИ, КОММЕНТАРИИ И ПОДПИСКИ
+    // =========================================================================
+    function requireAuth(reason) {
+      if (state.currentUser) return true;
+      openAuthModal(reason);
+      return false;
+    }
+
+    window.handleImageUpload = function(event) {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+          const canvas = document.createElement('canvas');
+          const MAX_W = 920;
+          let w = img.width;
+          let h = img.height;
+          if (w > MAX_W) {
+            h = Math.round((h * MAX_W) / w);
+            w = MAX_W;
+          }
+          canvas.width = w;
+          canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+          state.draft.imageDataUrl = canvas.toDataURL('image/jpeg', 0.76);
+          state.draft.mediaType = 'image';
+          renderApp();
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    };
+
+    window.removeDraftImage = function() {
+      state.draft.imageDataUrl = '';
+      state.draft.mediaUrlInput = '';
+      renderApp();
+    };
+
+    window.publishPost = async function(event) {
+      event.preventDefault();
+      if (!requireAuth('Войдите в аккаунт Трусики, чтобы опубликовать пост.')) return;
+      if (state.isPublishing) return;
+
+      const titleEl = document.getElementById('post-title-input');
+      const contentEl = document.getElementById('post-content-input');
+      const typeEl = document.getElementById('post-type-select');
+      const urlEl = document.getElementById('post-media-url-input');
+
+      const title = titleEl.value.trim();
+      const content = contentEl.value.trim();
+      const mediaUrl = urlEl ? urlEl.value.trim() : '';
+      const image = state.draft.imageDataUrl || (state.draft.mediaType === 'image' ? mediaUrl : '');
+      const selectedType = typeEl ? typeEl.value : 'text';
+
+      if (!title) {
+        showToast('Введите название поста', 'error');
+        return;
+      }
+      if (!content && !image && !mediaUrl) {
+        showToast('Добавьте текст или медиа к посту', 'error');
+        return;
+      }
+
+      // Проверка кулдауна 1 минута на публикацию постов (кроме @max)
+      if (!isAccountMax()) {
+        const now = Date.now();
+        const elapsedSec = Math.floor((now - (state.activity.lastPostAt || 0)) / 1000);
+        if (state.activity.lastPostAt && elapsedSec < 60) {
+          showToast(`Кулдаун: подождите ещё ${60 - elapsedSec} сек. перед публикацией поста`, 'error');
+          return;
+        }
+      }
+
+      const executeCreatePost = async () => {
+        state.isPublishing = true;
+        renderApp();
+        try {
+          const slug = generatePostSlug(14);
+          const newPost = {
+            slug,
+            authorId: state.currentUser.uid,
+            authorNick: normalizeNick(state.currentUser.nick || state.currentUser.handle || state.currentUser.name),
+            title,
+            content,
+            image,
+            mediaUrl: !image ? mediaUrl : '',
+            mediaType: image ? 'image' : selectedType,
+            likes: [],
+            views: 0,
+            pinned: false,
+            createdAt: Date.now()
+          };
+
+          await StorageAdapter.savePost(newPost);
+
+          state.activity.lastPostAt = Date.now();
+          state.activity.postTimestamps = [...cleanOldTimestamps(state.activity.postTimestamps), Date.now()];
+          writeLocal(LS_KEYS.ACTIVITY, state.activity);
+
+          state.draft = { title: '', content: '', mediaType: 'text', imageDataUrl: '', mediaUrlInput: '' };
+          state.isPublishing = false;
+          showToast('Пост опубликован!');
+          navigate(null, '/');
+        } catch (err) {
+          state.isPublishing = false;
+          showToast(err.message || 'Ошибка публикации', 'error');
+          renderApp();
+        }
+      };
+
+      // Капча "Стоп, а вы не робот?" при публикации более 3 постов в час
+      const recentPosts = cleanOldTimestamps(state.activity.postTimestamps);
+      if (!isAccountMax() && recentPosts.length >= 3) {
+        openCaptcha('Вы опубликовали более 3 постов за последний час.', executeCreatePost);
+        return;
+      }
+
+      await executeCreatePost();
+    };
+
+    window.toggleLike = async function(event, postSlug) {
+      if (event) event.stopPropagation();
+      if (!requireAuth('Войдите в аккаунт, чтобы ставить лайки.')) return;
+      const post = state.posts.find(p => p.slug === postSlug);
+      if (!post) return;
+      const uid = state.currentUser.uid;
+      const likes = Array.isArray(post.likes) ? [...post.likes] : [];
+      const idx = likes.indexOf(uid);
+      if (idx >= 0) likes.splice(idx, 1);
+      else {
+        likes.push(uid);
+        recordPostInteraction(post, 3);
+      }
+      await StorageAdapter.savePost({ ...post, likes });
+      renderApp();
+    };
+
+    window.submitComment = async function(event, postSlug) {
+      event.preventDefault();
+      if (!requireAuth('Войдите в аккаунт, чтобы оставлять комментарии.')) return;
+      const input = document.getElementById('comment-input');
+      const text = input.value.trim();
+      if (!text) return;
+
+      const executeCreateComment = async () => {
+        const newComment = {
+          id: 'c_' + generatePostSlug(10),
+          postSlug,
+          authorId: state.currentUser.uid,
+          text,
+          createdAt: Date.now()
+        };
+        await StorageAdapter.saveComment(newComment);
+
+        state.activity.commentTimestamps = [...cleanOldTimestamps(state.activity.commentTimestamps), Date.now()];
+        writeLocal(LS_KEYS.ACTIVITY, state.activity);
+
+        input.value = '';
+        showToast('Комментарий добавлен');
+        renderApp();
+      };
+
+      // Капча "Стоп, а вы не робот?" при написании более 2 комментариев в час
+      const recentComments = cleanOldTimestamps(state.activity.commentTimestamps);
+      if (!isAccountMax() && recentComments.length >= 2) {
+        openCaptcha('Вы отправили более 2 комментариев за последний час.', executeCreateComment);
+        return;
+      }
+
+      await executeCreateComment();
+    };
+
+    window.toggleFollow = async function(targetUid) {
+      if (!requireAuth('Войдите в аккаунт, чтобы подписываться.')) return;
+      const myUid = state.currentUser.uid;
+      if (myUid === targetUid) return;
+
+      const myProfile = state.usersMap[myUid];
+      const targetProfile = getUserByIdOrNick(targetUid);
+      if (!targetProfile) return;
+
+      const myFollowing = Array.isArray(myProfile.following) ? [...myProfile.following] : [];
+      const targetFollowers = Array.isArray(targetProfile.followers) ? [...targetProfile.followers] : [];
+      const isFollowing = myFollowing.includes(targetProfile.uid);
+
+      if (isFollowing) {
+        await StorageAdapter.updateUserFields(myUid, {
+          following: myFollowing.filter(id => id !== targetProfile.uid)
+        });
+        await StorageAdapter.updateUserFields(targetProfile.uid, {
+          followers: targetFollowers.filter(id => id !== myUid)
+        });
+        showToast('Вы отписались');
+      } else {
+        await StorageAdapter.updateUserFields(myUid, {
+          following: [...new Set([...myFollowing, targetProfile.uid])]
+        });
+        await StorageAdapter.updateUserFields(targetProfile.uid, {
+          followers: [...new Set([...targetFollowers, myUid])]
+        });
+        showToast('Вы подписались');
+      }
+      renderApp();
+    };
+
+    window.toggleNotInterested = async function(targetUid) {
+      if (!requireAuth('Войдите в аккаунт, чтобы скрывать авторов.')) return;
+      const myUid = state.currentUser.uid;
+      if (myUid === targetUid) return;
+      const hidden = Array.isArray(state.currentUser.notInterested) ? [...state.currentUser.notInterested] : [];
+      const exists = hidden.includes(targetUid);
+      const updated = exists ? hidden.filter(id => id !== targetUid) : [...new Set([...hidden, targetUid])];
+      await StorageAdapter.updateUserFields(myUid, { notInterested: updated });
+      showToast(exists ? 'Посты автора возвращены в ленту' : 'Посты автора скрыты из ленты');
+      renderApp();
+    };
+
+    // =========================================================================
+    // 7. ФИЛЬТРАЦИЯ, ПОИСК И РЕНДЕРИНГ ЭКРАНОВ
+    // =========================================================================
+    function getUserByIdOrNick(idOrNick) {
+      if (!idOrNick) return null;
+      if (state.usersMap[idOrNick]) return state.usersMap[idOrNick];
+      const clean = normalizeNick(idOrNick);
+      return Object.values(state.usersMap).find(
+        u => normalizeNick(u.nick || u.handle || u.name) === clean
+      ) || null;
+    }
+
+    function getAuthorDisplay(uid, fallbackNick = '') {
+      const u = getUserByIdOrNick(uid) || getUserByIdOrNick(fallbackNick);
+      if (u) return u;
+      const nick = normalizeNick(fallbackNick || uid);
+      return {
+        uid,
+        name: nick || 'Пользователь',
+        nick: nick || 'user',
+        handle: '@' + (nick || 'user'),
+        avatar: '',
+        bio: '',
+        following: [],
+        followers: []
+      };
+    }
+
+    function renderAvatarHtml(userObj, sizeClass = 'w-9 h-9', textSizeClass = 'text-xs') {
+      const initial = escapeHtml((userObj?.name || 'Т').charAt(0).toUpperCase());
+      if (userObj?.avatar) {
+        return `<img src="${escapeHtml(userObj.avatar)}" alt="${escapeHtml(userObj.name)}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" class="${sizeClass} rounded-full object-cover border border-borderHover bg-neutral-900 shrink-0" />
+                <div style="display:none" class="${sizeClass} rounded-full bg-[#1C1C1C] border border-borderHover text-white font-semibold ${textSizeClass} items-center justify-center shrink-0">${initial}</div>`;
+      }
+      return `<div class="${sizeClass} rounded-full bg-[#1A1A1A] border border-borderHover text-white font-semibold ${textSizeClass} flex items-center justify-center shrink-0">${initial}</div>`;
+    }
+
+    function updateHeaderUI() {
+      const trigger = document.getElementById('avatar-trigger');
+      const adminItems = document.getElementById('admin-menu-items');
+      const checkEl = document.getElementById('admin-rights-check');
+
+      if (state.currentUser) {
+        trigger.innerHTML = renderAvatarHtml(state.currentUser, 'w-full h-full', 'text-xs');
+        document.getElementById('dropdown-name').textContent = state.currentUser.name;
+        document.getElementById('dropdown-handle').textContent = state.currentUser.handle;
+
+        if (isAccountMax()) {
+          adminItems.classList.remove('hidden');
+          if (state.adminRightsActive) {
+            checkEl.textContent = '✓';
+            checkEl.className = 'w-4 h-4 rounded border border-white bg-white text-black flex items-center justify-center text-[11px] font-bold';
+          } else {
+            checkEl.textContent = '';
+            checkEl.className = 'w-4 h-4 rounded border border-neutral-500 bg-transparent text-black flex items-center justify-center text-[11px] font-bold';
+          }
+        } else {
+          adminItems.classList.add('hidden');
+        }
+      } else {
+        trigger.innerHTML = `
+          <svg class="w-4 h-4 text-textSecondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+          </svg>`;
+        adminItems.classList.add('hidden');
+      }
+      renderSupportUI();
+    }
+
+    window.handleAvatarClick = function(event) {
+      event.stopPropagation();
+      if (!state.currentUser) {
+        openAuthModal();
+        return;
+      }
+      document.getElementById('user-dropdown').classList.toggle('hidden');
+    };
+
+    window.closeUserDropdown = function() {
+      document.getElementById('user-dropdown').classList.add('hidden');
+    };
+
+    window.openMyProfile = function() {
+      closeUserDropdown();
+      if (state.currentUser) {
+        const nick = normalizeNick(state.currentUser.nick || state.currentUser.handle || state.currentUser.name);
+        navigate(null, `/@${encodeURIComponent(nick)}`);
+      }
+    };
+
+    window.openAuthModal = function(subtitle) {
+      document.getElementById('auth-step-main').classList.remove('hidden');
+      document.getElementById('auth-step-google-setup').classList.add('hidden');
+      document.getElementById('auth-error-msg').classList.add('hidden');
+      document.getElementById('auth-modal-subtitle').textContent = subtitle || 'Войдите через Google или по нику и паролю.';
+      document.getElementById('auth-modal').classList.remove('hidden');
+    };
+
+    window.closeAuthModal = function() {
+      document.getElementById('auth-modal').classList.add('hidden');
+      state.pendingGoogleUser = null;
+    };
+
+    window.openConnectionsModal = function(title, uids) {
+      document.getElementById('connections-modal-title').textContent = title;
+      const listEl = document.getElementById('connections-modal-list');
+      if (!uids || uids.length === 0) {
+        listEl.innerHTML = `<div class="p-8 text-center text-sm text-textSecondary">Список пуст</div>`;
+      } else {
+        listEl.innerHTML = uids.map(uid => {
+          const u = getAuthorDisplay(uid);
+          return `
+            <div onclick="closeConnectionsModal(); openUserProfileByNick(event, '${escapeHtml(u.nick)}')"
+                 class="px-5 py-3.5 flex items-center justify-between hover:bg-white/[0.03] transition-colors cursor-pointer">
+              <div class="flex items-center gap-3 min-w-0">
+                ${renderAvatarHtml(u, 'w-9 h-9', 'text-xs')}
+                <div class="min-w-0">
+                  <p class="text-sm font-medium text-white truncate">${escapeHtml(u.name)}</p>
+                  <p class="text-xs text-textSecondary truncate">${escapeHtml(u.handle)}</p>
+                </div>
+              </div>
+              <span class="text-xs text-textSecondary">→</span>
+            </div>
+          `;
+        }).join('');
+      }
+      document.getElementById('connections-modal').classList.remove('hidden');
+    };
+
+    window.closeConnectionsModal = function() {
+      document.getElementById('connections-modal').classList.add('hidden');
+    };
+
+    document.addEventListener('click', (e) => {
+      const container = document.getElementById('user-menu-container');
+      if (container && !container.contains(e.target)) {
+        closeUserDropdown();
+      }
+    });
+
+    // Фильтры, вкладки Все / Подписки и поиск
+    window.setFeedTab = function(tab) {
+      if (tab === 'subscriptions' && !requireAuth('Войдите, чтобы смотреть ленту подписок.')) return;
+      state.feedTab = tab;
+      renderApp();
+    };
+
+    window.handleSearchQueryChange = function(val) {
+      state.searchQuery = val;
+      renderApp();
+    };
+
+    window.toggleFilterDropdown = function() {
+      state.filters.open = !state.filters.open;
+      renderApp();
+    };
+
+    window.setFilterOption = function(key, value) {
+      state.filters[key] = value;
+      renderApp();
+    };
+
+    function getFilteredAndSortedPosts() {
+      const hiddenAuthors = state.currentUser?.notInterested || [];
+      const followingIds = state.currentUser?.following || [];
+      const now = Date.now();
+
+      const periodMs = {
+        today: 24 * 3600 * 1000,
+        week: 7 * 24 * 3600 * 1000,
+        month: 30 * 24 * 3600 * 1000,
+        year: 365 * 24 * 3600 * 1000,
+        all: Infinity
+      }[state.filters.period] || Infinity;
+
+      let list = state.posts.filter(p => {
+        if (hiddenAuthors.includes(p.authorId)) return false;
+
+        if (state.feedTab === 'subscriptions') {
+          if (!followingIds.includes(p.authorId)) return false;
+        }
+
+        if (periodMs !== Infinity) {
+          if ((now - (p.createdAt || 0)) > periodMs) return false;
+        }
+
+        const pType = p.mediaType || (p.image ? 'image' : 'text');
+        if (state.filters.type !== 'all' && pType !== state.filters.type) {
+          return false;
+        }
+
+        if (state.activeTagFilter) {
+          const full = `${p.title || ''} ${p.content || ''}`.toLowerCase();
+          if (!full.includes('#' + state.activeTagFilter) && !full.includes(state.activeTagFilter)) {
+            return false;
+          }
+        }
+
+        const q = (state.searchQuery || '').trim().toLowerCase();
+        if (q) {
+          const hay = `${p.title || ''} ${p.content || ''}`.toLowerCase();
+          if (!hay.includes(q)) return false;
+        }
+
+        return true;
+      });
+
+      list.sort((a, b) => {
+        // Закреплённые посты всегда сверху
+        if (Boolean(b.pinned) !== Boolean(a.pinned)) {
+          return b.pinned ? 1 : -1;
+        }
+        const aLikes = (a.likes || []).length;
+        const bLikes = (b.likes || []).length;
+        const aComms = state.comments.filter(c => c.postSlug === a.slug).length;
+        const bComms = state.comments.filter(c => c.postSlug === b.slug).length;
+        const aViews = a.views || 0;
+        const bViews = b.views || 0;
+
+        if (state.filters.sort === 'likes') {
+          return bLikes - aLikes || (b.createdAt || 0) - (a.createdAt || 0);
+        }
+        if (state.filters.sort === 'comments') {
+          return bComms - aComms || (b.createdAt || 0) - (a.createdAt || 0);
+        }
+        if (state.filters.sort === 'views') {
+          return bViews - aViews || (b.createdAt || 0) - (a.createdAt || 0);
+        }
+        if (state.filters.sort === 'best') {
+          const scoreA = aLikes * 3 + aComms * 2 + aViews * 0.2;
+          const scoreB = bLikes * 3 + bComms * 2 + bViews * 0.2;
+          return scoreB - scoreA || (b.createdAt || 0) - (a.createdAt || 0);
+        }
+        return (b.createdAt || 0) - (a.createdAt || 0);
+      });
+
+      return list;
+    }
+
+    function renderPostCard(post, isDetailed = false) {
+      const author = getAuthorDisplay(post.authorId, post.authorNick);
+      const likes = Array.isArray(post.likes) ? post.likes : [];
+      const isLiked = state.currentUser ? likes.includes(state.currentUser.uid) : false;
+      const postComments = state.comments.filter(c => c.postSlug === post.slug);
+      const canDelete = state.currentUser && (post.authorId === state.currentUser.uid || isUserAdmin());
+      const canPin = isUserAdmin();
+
+      return `
+        <article ${!isDetailed ? `onclick="openPostDetail('${escapeHtml(post.slug)}')"` : ''}
+                 class="rounded-2xl bg-bgCard border ${post.pinned ? 'border-emerald-500/40' : 'border-borderSubtle'} ${!isDetailed ? 'hover:border-borderHover hover:bg-bgCardHover cursor-pointer' : ''} p-5 transition-all animate-fade-in">
+          <div class="flex items-center justify-between gap-2 mb-3.5">
+            <div onclick="openUserProfileByNick(event, '${escapeHtml(author.nick)}')"
+                 class="flex items-center gap-3 group cursor-pointer min-w-0">
+              ${renderAvatarHtml(author, 'w-9 h-9', 'text-xs')}
+              <div class="min-w-0">
+                <div class="flex items-center gap-1.5 flex-wrap">
+                  <span class="text-sm font-medium text-white group-hover:underline truncate">${escapeHtml(author.name)}</span>
+                  <span class="text-xs text-textSecondary truncate">${escapeHtml(author.handle)}</span>
+                  ${post.pinned ? `<span class="px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 text-[10px] font-semibold">Закреплено</span>` : ''}
+                </div>
+                <p class="text-[11px] text-textMuted">${formatRelativeTime(post.createdAt)} • ${post.views || 0} просм.</p>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-1.5 shrink-0">
+              ${canPin ? `
+                <button onclick="togglePinPost(event, '${escapeHtml(post.slug)}')"
+                        class="px-2.5 py-1 rounded-lg bg-[#181818] hover:bg-[#242424] border border-borderSubtle text-[11px] text-textSecondary hover:text-white cursor-pointer">
+                  ${post.pinned ? 'Открепить' : 'Закрепить'}
+                </button>
+              ` : ''}
+              ${canDelete ? `
+                <button onclick="deletePostAction(event, '${escapeHtml(post.slug)}')"
+                        class="px-2.5 py-1 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 text-[11px] text-red-400 cursor-pointer">
+                  Удалить
+                </button>
+              ` : ''}
+            </div>
+          </div>
+
+          <h2 class="${isDetailed ? 'text-xl' : 'text-[16px]'} font-semibold text-white tracking-tight leading-snug mb-2">
+            ${escapeHtml(post.title)}
+          </h2>
+
+          ${post.content ? `
+            <div class="text-sm text-[#CCCCCC] leading-relaxed whitespace-pre-line break-words ${!isDetailed ? 'line-clamp-5' : ''}">${formatPostTextWithTags(post.content)}</div>
+          ` : ''}
+
+          ${post.image ? `
+            <div class="mt-3.5 rounded-xl overflow-hidden border border-borderSubtle bg-black">
+              <img src="${escapeHtml(post.image)}" alt="${escapeHtml(post.title)}"
+                   onerror="this.parentElement.style.display='none'"
+                   class="w-full ${isDetailed ? 'max-h-[560px]' : 'max-h-[380px]'} object-cover block" />
+            </div>
+          ` : ''}
+
+          ${!post.image && post.mediaUrl ? `
+            <div class="mt-3 rounded-xl bg-[#0A0A0A] border border-borderSubtle px-3.5 py-2.5 text-xs text-sky-400 truncate">
+              Медиа: ${escapeHtml(post.mediaUrl)}
+            </div>
+          ` : ''}
+
+          <div class="mt-4 pt-3 border-t border-borderSubtle/80 flex items-center gap-5">
+            <button onclick="toggleLike(event, '${escapeHtml(post.slug)}')"
+                    class="inline-flex items-center gap-1.5 text-xs font-medium ${isLiked ? 'text-rose-500' : 'text-textSecondary hover:text-white'} transition-colors cursor-pointer py-1 px-2 -ml-2 rounded-lg hover:bg-white/5">
+              <span>♥</span>
+              <span>${likes.length}</span>
+            </button>
+
+            <button onclick="${!isDetailed ? `event.stopPropagation(); openPostDetail('${escapeHtml(post.slug)}')` : `document.getElementById('comment-input')?.focus()`}"
+                    class="inline-flex items-center gap-1.5 text-xs font-medium text-textSecondary hover:text-white transition-colors cursor-pointer py-1 px-2 rounded-lg hover:bg-white/5">
+              <span>💬</span>
+              <span>${postComments.length}</span>
+            </button>
+          </div>
+        </article>
+      `;
+    }
+
+    function renderFeedControls() {
+      const periods = [
+        ['today', 'Сегодня'],
+        ['week', 'Неделя'],
+        ['month', 'Месяц'],
+        ['year', 'Год'],
+        ['all', 'Всё время']
+      ];
+      const sorts = [
+        ['best', 'Лучшее'],
+        ['newest', 'Новые'],
+        ['views', 'По просмотрам'],
+        ['likes', 'По лайкам'],
+        ['comments', 'По комментариям']
+      ];
+      const types = [
+        ['all', 'Всё'],
+        ['image', 'Изображения'],
+        ['video', 'Видео'],
+        ['audio', 'Аудио'],
+        ['album', 'Альбомы'],
+        ['text', 'Тексты']
+      ];
+
+      return `
+        <!-- Мобильный поиск по содержанию -->
+        <div class="mb-3 md:hidden">
+          <input type="search" value="${escapeHtml(state.searchQuery)}"
+                 oninput="handleSearchQueryChange(this.value)"
+                 placeholder="Поиск по содержанию постов..."
+                 class="w-full bg-[#111111] border border-borderSubtle rounded-xl px-3.5 py-2 text-xs text-white placeholder-textMuted focus:outline-none" />
+        </div>
+
+        <!-- Вкладки Все / Подписки + кнопка Фильтрация -->
+        <div class="mb-4 relative flex items-center justify-between gap-2 flex-wrap">
+          <div class="flex items-center gap-4">
+            <button onclick="setFeedTab('all')"
+                    class="pb-2 text-sm font-semibold border-b-2 transition-colors cursor-pointer ${state.feedTab === 'all' ? 'text-white border-white' : 'text-textSecondary border-transparent hover:text-white'}">
+              Все
+            </button>
+            <button onclick="setFeedTab('subscriptions')"
+                    class="pb-2 text-sm font-semibold border-b-2 transition-colors cursor-pointer ${state.feedTab === 'subscriptions' ? 'text-white border-white' : 'text-textSecondary border-transparent hover:text-white'}">
+              Подписки
+            </button>
+          </div>
+
+          <button onclick="toggleFilterDropdown()"
+                  class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-[#121212] hover:bg-[#1A1A1A] border border-borderSubtle text-xs font-medium text-white cursor-pointer">
+            <span>Фильтрация</span>
+            <span>${state.filters.open ? '▲' : '▼'}</span>
+          </button>
+
+          ${state.filters.open ? `
+            <div class="w-full sm:w-[340px] sm:right-0 sm:left-auto top-11 sm:absolute z-30 rounded-2xl bg-[#111111] border border-[#282828] p-4 shadow-2xl space-y-4 animate-fade-in">
+              <div>
+                <p class="text-[11px] font-medium text-textSecondary mb-2">Период</p>
+                <div class="flex flex-wrap gap-1.5">
+                  ${periods.map(([k, lbl]) => `
+                    <button type="button" onclick="setFilterOption('period', '${k}')"
+                            class="px-2.5 py-1 rounded-lg text-xs cursor-pointer ${state.filters.period === k ? 'bg-white text-black font-semibold' : 'bg-[#191919] text-textSecondary hover:text-white'}">
+                      ${lbl}
+                    </button>
+                  `).join('')}
+                </div>
+              </div>
+
+              <div>
+                <p class="text-[11px] font-medium text-textSecondary mb-2">Сортировка</p>
+                <div class="flex flex-wrap gap-1.5">
+                  ${sorts.map(([k, lbl]) => `
+                    <button type="button" onclick="setFilterOption('sort', '${k}')"
+                            class="px-2.5 py-1 rounded-lg text-xs cursor-pointer ${state.filters.sort === k ? 'bg-white text-black font-semibold' : 'bg-[#191919] text-textSecondary hover:text-white'}">
+                      ${lbl}
+                    </button>
+                  `).join('')}
+                </div>
+              </div>
+
+              <div>
+                <p class="text-[11px] font-medium text-textSecondary mb-2">Тип публикации</p>
+                <div class="flex flex-wrap gap-1.5">
+                  ${types.map(([k, lbl]) => `
+                    <button type="button" onclick="setFilterOption('type', '${k}')"
+                            class="px-2.5 py-1 rounded-lg text-xs cursor-pointer ${state.filters.type === k ? 'bg-white text-black font-semibold' : 'bg-[#191919] text-textSecondary hover:text-white'}">
+                      ${lbl}
+                    </button>
+                  `).join('')}
+                </div>
+              </div>
+            </div>
+          ` : ''}
+        </div>
+      `;
+    }
+
+    function renderFeedView() {
+      const postsList = getFilteredAndSortedPosts();
+
+      if (postsList.length === 0) {
+        return `
+          ${renderFeedControls()}
+          <div class="rounded-2xl bg-bgCard border border-borderSubtle p-12 text-center animate-fade-in">
+            <div class="w-12 h-12 rounded-2xl bg-white text-black flex items-center justify-center mx-auto mb-4">
+              <svg class="w-5 h-5 fill-black" viewBox="0 0 24 24">
+                <polygon points="12,4 22,20 2,20" />
+              </svg>
+            </div>
+            <p class="text-base font-semibold text-white mb-1.5">Пока нет постов</p>
+            <p class="text-sm text-textSecondary mb-6">Лента пуста или по выбранным фильтрам ничего не найдено.</p>
+            <button onclick="navigate(null, '/new')"
+                    class="inline-flex items-center gap-2 bg-white hover:bg-neutral-200 text-black font-medium text-sm px-5 py-2.5 rounded-xl transition-all cursor-pointer">
+              <span>Создать пост</span>
+            </button>
+          </div>
+        `;
+      }
+
+      return `
+        ${renderFeedControls()}
+        <div class="space-y-4">
+          ${postsList.map(post => renderPostCard(post, false)).join('')}
+        </div>
+      `;
+    }
+
+    function renderPostDetailView(slug) {
+      const post = state.posts.find(p => p.slug === slug);
+      if (!post) {
+        return `
+          <div class="animate-fade-in">
+            <button onclick="navigate(null, '/')" class="text-sm text-textSecondary hover:text-white mb-4 cursor-pointer">← Назад</button>
+            <div class="rounded-2xl bg-bgCard border border-borderSubtle p-10 text-center">
+              <p class="text-base font-medium text-white">Пост не найден</p>
+            </div>
+          </div>
+        `;
+      }
+
+      const postComments = state.comments.filter(c => c.postSlug === post.slug);
+
+      return `
+        <div class="animate-fade-in">
+          <button onclick="navigate(null, '/')" class="text-sm text-textSecondary hover:text-white mb-4 cursor-pointer">← Назад к постам</button>
+          ${renderPostCard(post, true)}
+
+          <section class="mt-4 rounded-2xl bg-bgCard border border-borderSubtle p-5">
+            <h3 class="text-sm font-semibold text-white mb-4">Комментарии (${postComments.length})</h3>
+            <form onsubmit="submitComment(event, '${escapeHtml(post.slug)}')" class="mb-5 flex gap-2">
+              <input id="comment-input" type="text" required placeholder="Написать комментарий..."
+                     class="flex-1 bg-[#0A0A0A] border border-borderSubtle rounded-xl px-3.5 py-2 text-sm text-white placeholder-textMuted focus:outline-none focus:border-neutral-500" />
+              <button type="submit" class="px-4 py-2 rounded-xl bg-white hover:bg-neutral-200 text-black text-xs font-semibold cursor-pointer">
+                Отправить
+              </button>
+            </form>
+
+            ${postComments.length === 0 ? `
+              <p class="text-xs text-textSecondary text-center py-4">Комментариев пока нет.</p>
+            ` : `
+              <div class="space-y-3">
+                ${postComments.map(c => {
+                  const cAuthor = getAuthorDisplay(c.authorId);
+                  const canDelComment = state.currentUser && (c.authorId === state.currentUser.uid || isUserAdmin());
+                  return `
+                    <div class="p-3 rounded-xl bg-[#0B0B0B] border border-borderSubtle flex items-start justify-between gap-2">
+                      <div class="min-w-0">
+                        <div class="flex items-center gap-2 mb-1">
+                          <span onclick="openUserProfileByNick(event, '${escapeHtml(cAuthor.nick)}')" class="text-xs font-semibold text-white hover:underline cursor-pointer">${escapeHtml(cAuthor.name)}</span>
+                          <span class="text-[11px] text-textMuted">${formatRelativeTime(c.createdAt)}</span>
+                        </div>
+                        <p class="text-sm text-[#D4D4D4] break-words">${escapeHtml(c.text)}</p>
+                      </div>
+                      ${canDelComment ? `
+                        <button onclick="deleteCommentAction(event, '${escapeHtml(c.id)}')" class="text-[11px] text-red-400 hover:underline shrink-0 cursor-pointer">
+                          Удалить
+                        </button>
+                      ` : ''}
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            `}
+          </section>
+        </div>
+      `;
+    }
+
+    function renderCreatePostView() {
+      if (!state.currentUser) {
+        return `
+          <div class="rounded-2xl bg-bgCard border border-borderSubtle p-8 text-center animate-fade-in">
+            <h2 class="text-lg font-semibold text-white mb-2">Требуется вход</h2>
+            <p class="text-sm text-textSecondary mb-5">Войдите в аккаунт Трусики, чтобы создать пост.</p>
+            <button onclick="openAuthModal()" class="px-5 py-2.5 rounded-xl bg-white text-black text-sm font-medium cursor-pointer">
+              Войти
+            </button>
+          </div>
+        `;
+      }
+
+      const preview = state.draft.imageDataUrl || (state.draft.mediaType === 'image' ? state.draft.mediaUrlInput : '');
+
+      return `
+        <div class="animate-fade-in">
+          <button onclick="navigate(null, '/')" class="text-sm text-textSecondary hover:text-white mb-4 cursor-pointer">← Отмена</button>
+          <form onsubmit="publishPost(event)" class="rounded-2xl bg-bgCard border border-borderSubtle p-6 space-y-5">
+            <h1 class="text-lg font-semibold text-white">Создать пост</h1>
+
+            <div>
+              <label class="block text-xs text-textSecondary mb-2">Название поста</label>
+              <input id="post-title-input" type="text" maxlength="140" required
+                     value="${escapeHtml(state.draft.title)}"
+                     oninput="state.draft.title = this.value"
+                     placeholder="Заголовок поста"
+                     class="w-full bg-[#0A0A0A] border border-borderSubtle rounded-xl px-4 py-3 text-sm text-white placeholder-textMuted focus:outline-none focus:border-neutral-500" />
+            </div>
+
+            <div>
+              <label class="block text-xs text-textSecondary mb-2">Текст поста</label>
+              <textarea id="post-content-input" rows="5"
+                        oninput="state.draft.content = this.value"
+                        placeholder="Введите текст поста..."
+                        class="w-full bg-[#0A0A0A] border border-borderSubtle rounded-xl px-4 py-3 text-sm text-white placeholder-textMuted focus:outline-none focus:border-neutral-500 resize-y"></textarea>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs text-textSecondary mb-1.5">Тип публикации</label>
+                <select id="post-type-select" onchange="state.draft.mediaType = this.value"
+                        class="w-full bg-[#0A0A0A] border border-borderSubtle rounded-xl px-3 py-2 text-xs text-white focus:outline-none">
+                  <option value="text" ${state.draft.mediaType === 'text' ? 'selected' : ''}>Текст</option>
+                  <option value="image" ${state.draft.mediaType === 'image' ? 'selected' : ''}>Изображение</option>
+                  <option value="video" ${state.draft.mediaType === 'video' ? 'selected' : ''}>Видео</option>
+                  <option value="audio" ${state.draft.mediaType === 'audio' ? 'selected' : ''}>Аудио</option>
+                  <option value="album" ${state.draft.mediaType === 'album' ? 'selected' : ''}>Альбом</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs text-textSecondary mb-1.5">Ссылка на медиа (если нужно)</label>
+                <input id="post-media-url-input" type="url"
+                       value="${escapeHtml(state.draft.mediaUrlInput)}"
+                       oninput="state.draft.mediaUrlInput = this.value.trim()"
+                       placeholder="https://..."
+                       class="w-full bg-[#0A0A0A] border border-borderSubtle rounded-xl px-3 py-2 text-xs text-white placeholder-textMuted focus:outline-none" />
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-xs text-textSecondary mb-2">Фото с устройства</label>
+              ${preview ? `
+                <div class="relative rounded-xl overflow-hidden border border-borderSubtle">
+                  <img src="${escapeHtml(preview)}" alt="Превью" class="w-full max-h-80 object-cover" />
+                  <button type="button" onclick="removeDraftImage()" class="absolute top-3 right-3 px-3 py-1 rounded-lg bg-black/80 text-white text-xs cursor-pointer">
+                    Удалить фото
+                  </button>
+                </div>
+              ` : `
+                <label class="flex items-center justify-center p-4 rounded-xl bg-[#0A0A0A] border border-dashed border-borderHover hover:border-neutral-500 cursor-pointer text-xs text-textSecondary">
+                  <span>Выбрать изображение</span>
+                  <input type="file" accept="image/*" onchange="handleImageUpload(event)" class="hidden" />
+                </label>
+              `}
+            </div>
+
+            <div class="flex justify-end gap-3 pt-2 border-t border-borderSubtle">
+              <button type="submit" ${state.isPublishing ? 'disabled' : ''}
+                      class="px-6 py-2.5 rounded-xl bg-white hover:bg-neutral-200 text-black text-sm font-semibold cursor-pointer">
+                ${state.isPublishing ? 'Публикация...' : 'Опубликовать'}
+              </button>
+            </div>
+          </form>
+        </div>
+      `;
+    }
+
+    function renderProfileView(targetNick) {
+      const profile = getAuthorDisplay(targetNick, targetNick);
+      const userPosts = state.posts.filter(
+        p => p.authorId === profile.uid || normalizeNick(p.authorNick) === normalizeNick(targetNick)
+      );
+      const followers = Array.isArray(profile.followers) ? profile.followers : [];
+      const following = Array.isArray(profile.following) ? profile.following : [];
+      const isMe = state.currentUser && state.currentUser.uid === profile.uid;
+      const isFollowing = state.currentUser && (state.currentUser.following || []).includes(profile.uid);
+      const isNotInterested = state.currentUser && (state.currentUser.notInterested || []).includes(profile.uid);
+
+      window.__profileFollowers = followers;
+      window.__profileFollowing = following;
+
+      return `
+        <div class="animate-fade-in">
+          <button onclick="navigate(null, '/')" class="text-sm text-textSecondary hover:text-white mb-4 cursor-pointer">← К ленте</button>
+
+          <div class="rounded-2xl bg-bgCard border border-borderSubtle p-6 mb-5">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div class="flex items-center gap-4">
+                ${renderAvatarHtml(profile, 'w-16 h-16', 'text-xl')}
+                <div>
+                  <h1 class="text-xl font-bold text-white">${escapeHtml(profile.name)}</h1>
+                  <p class="text-sm text-textSecondary">/@${escapeHtml(profile.nick)}</p>
+                </div>
+              </div>
+
+              ${!isMe ? `
+                <div class="flex items-center gap-2">
+                  <button onclick="toggleFollow('${escapeHtml(profile.uid)}')"
+                          class="px-4 py-2 rounded-xl text-xs font-medium cursor-pointer ${isFollowing ? 'bg-[#1C1C1C] text-white border border-borderHover' : 'bg-white text-black'}">
+                    ${isFollowing ? 'Вы подписаны' : 'Подписаться'}
+                  </button>
+                  <button onclick="toggleNotInterested('${escapeHtml(profile.uid)}')"
+                          class="px-3.5 py-2 rounded-xl text-xs font-medium border cursor-pointer ${isNotInterested ? 'bg-amber-500/15 border-amber-500/40 text-amber-300' : 'bg-[#0A0A0A] border-borderSubtle text-textSecondary hover:text-white'}">
+                    ${isNotInterested ? 'Скрыто' : 'Не интересно'}
+                  </button>
+                </div>
+              ` : ''}
+            </div>
+
+            <div class="grid grid-cols-3 gap-2 mt-6 pt-5 border-t border-borderSubtle text-center">
+              <div class="p-2.5 rounded-xl bg-[#0A0A0A]">
+                <p class="text-lg font-bold text-white">${userPosts.length}</p>
+                <p class="text-xs text-textSecondary">Публикации</p>
+              </div>
+              <button onclick="openConnectionsModal('Подписчики', window.__profileFollowers)" class="p-2.5 rounded-xl bg-[#0A0A0A] hover:bg-[#151515] cursor-pointer">
+                <p class="text-lg font-bold text-white">${followers.length}</p>
+                <p class="text-xs text-textSecondary">Подписчики</p>
+              </button>
+              <button onclick="openConnectionsModal('Подписки', window.__profileFollowing)" class="p-2.5 rounded-xl bg-[#0A0A0A] hover:bg-[#151515] cursor-pointer">
+                <p class="text-lg font-bold text-white">${following.length}</p>
+                <p class="text-xs text-textSecondary">Подписки</p>
+              </button>
+            </div>
+          </div>
+
+          <div class="space-y-4">
+            ${userPosts.map(p => renderPostCard(p, false)).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderApp() {
+      updateHeaderUI();
+
+      // Проверка бана текущего пользователя
+      const activeBan = getActiveBanForUser(state.currentUser);
+      const banScreen = document.getElementById('ban-screen');
+      if (activeBan) {
+        document.getElementById('ban-reason-text').textContent = activeBan.reason;
+        document.getElementById('ban-duration-text').textContent = formatBanDuration(activeBan);
+        banScreen.classList.remove('hidden');
+        return;
+      } else {
+        banScreen.classList.add('hidden');
+      }
+
+      // Проверка режима техработ (если ВЫКЛ — показываем экран всем кроме @max)
+      const maintScreen = document.getElementById('maintenance-screen');
+      const mainShell = document.getElementById('main-shell');
+      if (!state.siteEnabled && !isAccountMax()) {
+        maintScreen.classList.remove('hidden');
+        mainShell.classList.add('hidden');
+        return;
+      } else {
+        maintScreen.classList.add('hidden');
+        mainShell.classList.remove('hidden');
+      }
+
+      const root = document.getElementById('app-root');
+      if (state.route.name === 'new') {
+        root.innerHTML = renderCreatePostView();
+      } else if (state.route.name === 'post') {
+        root.innerHTML = renderPostDetailView(state.route.param);
+      } else if (state.route.name === 'profile') {
+        root.innerHTML = renderProfileView(state.route.param);
+      } else {
+        root.innerHTML = renderFeedView();
+      }
+    }
+
+    // =========================================================================
+    // 8. ЗАПУСК И ПОСТОЯННОЕ ВОССТАНОВЛЕНИЕ СЕССИИ
+    // =========================================================================
+    loadFromLocalStorage();
+    state.route = parseCurrentUrl();
+    renderApp();
+    initCloudListeners();
+
+    if (fbAuth) {
+      onAuthStateChanged(fbAuth, async (gUser) => {
+        if (!gUser) return;
+        const savedUid = localStorage.getItem(LS_KEYS.SESSION);
+        if (savedUid && state.usersMap[savedUid]) return;
+
+        let linkedUser = Object.values(state.usersMap).find(u => u.googleUid === gUser.uid);
+        if (!linkedUser && fbDb) {
+          try {
+            const snap = await getDoc(doc(fbDb, 'trusiki_users', 'g_' + gUser.uid));
+            if (snap.exists()) {
+              linkedUser = { uid: snap.id, ...snap.data() };
+              state.usersMap[linkedUser.uid] = linkedUser;
+              writeLocal(LS_KEYS.USERS, state.usersMap);
+            }
+          } catch (e) {}
+        }
+        if (linkedUser) {
+          setLoggedInSession(linkedUser);
+          renderApp();
+        }
+      });
+    }
+  </script>
+</body>
+</html>
