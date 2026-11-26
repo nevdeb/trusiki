@@ -1,0 +1,3422 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BurmalChess — Онлайн Шахматы</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            grayBase: '#181a1b',
+            grayNav: '#212426',
+            grayCard: '#282c2f',
+            grayHover: '#32373b',
+            grayBorder: '#363b40',
+            tealAccent: '#2dd4bf',
+            tealBright: '#5eead4'
+          }
+        }
+      }
+    };
+  </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background-color: #181a1b;
+      color: #f3f4f6;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      overflow-x: hidden;
+    }
+    .board-grid {
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      grid-template-rows: repeat(8, 1fr);
+      aspect-ratio: 1 / 1;
+      width: 100%;
+      max-width: 560px;
+      user-select: none;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.65);
+    }
+    .sq-cell {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+    .sq-piece {
+      width: 84%;
+      height: 84%;
+      pointer-events: auto;
+      cursor: grab;
+      transition: transform 0.08s ease;
+    }
+    .sq-piece:active { cursor: grabbing; transform: scale(1.06); }
+    .sq-piece.dragging-origin { opacity: 0 !important; }
+    .move-dot {
+      width: 28%;
+      height: 28%;
+      border-radius: 9999px;
+      background: rgba(0, 0, 0, 0.22);
+      pointer-events: none;
+    }
+    .capture-ring {
+      position: absolute;
+      inset: 6%;
+      border-radius: 9999px;
+      border: 4px solid rgba(0, 0, 0, 0.24);
+      pointer-events: none;
+    }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #181a1b; }
+    ::-webkit-scrollbar-thumb { background: #363b40; border-radius: 999px; }
+  </style>
+</head>
+<body class="bg-grayBase text-gray-100 min-h-screen flex flex-col">
+  <div id="app" class="min-h-screen flex flex-col"></div>
+  <div id="toast-root" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none"></div>
+  <div id="popup-root" class="fixed top-16 right-4 z-50 flex flex-col gap-2.5 max-w-sm w-full pointer-events-none"></div>
+
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+    import {
+      getAuth,
+      GoogleAuthProvider,
+      signInWithPopup,
+      signInWithEmailAndPassword,
+      onAuthStateChanged,
+      signOut
+    } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+    import {
+      getDatabase,
+      ref,
+      set,
+      get,
+      update,
+      remove,
+      onValue,
+      push,
+      onDisconnect
+    } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js';
+
+    const FIREBASE_CONFIG = {
+      apiKey: "AIzaSyCt1Y-p7f30Qah5igY3Ug26YKI8EMdtxEY",
+      authDomain: "trusiki-32efb.firebaseapp.com",
+      databaseURL: "https://trusiki-32efb-default-rtdb.europe-west1.firebasedatabase.app",
+      projectId: "trusiki-32efb",
+      storageBucket: "trusiki-32efb.firebasestorage.app",
+      messagingSenderId: "96147351301",
+      appId: "1:96147351301:web:681089c880c4a6fdc3b96c"
+    };
+
+    const app = initializeApp(FIREBASE_CONFIG);
+    const auth = getAuth(app);
+    const rtdb = getDatabase(app);
+
+    const ADMIN_EMAIL = 'zoneboren@gmail.com';
+    const CHESS_TITLES = ['GM', 'IM', 'FM', 'CM', 'NM', 'WGM', 'WIM', 'WFM', 'WCM', 'WNM'];
+    const ELO_RESET_VERSION = 'v500_2026_11_26_clean';
+    const LS_ELO_RESET_DONE = 'burmalchess_elo_reset_done';
+    const LS_LOCAL_USER = 'burmalchess_local_session_v2';
+
+    const FM_TRACKS = [
+      { id: 0, title: 'Burmal Phonk — Сколько весит', bpm: 132, notes: [146.83, 174.61, 196.00, 220.00, 196.00, 174.61, 164.81, 146.83] },
+      { id: 1, title: 'Grandmaster Synthwave', bpm: 118, notes: [220.00, 261.63, 329.63, 392.00, 329.63, 293.66, 261.63, 246.94] },
+      { id: 2, title: 'Midnight Blitz Lofi', bpm: 92, notes: [174.61, 220.00, 261.63, 329.63, 293.66, 246.94, 196.00, 174.61] },
+      { id: 3, title: 'Boris Final Boss Theme', bpm: 150, notes: [110.00, 116.54, 130.81, 116.54, 110.00, 146.83, 138.59, 116.54] }
+    ];
+
+    const COACHES = [
+      {
+        id: 'matti',
+        name: 'Matti',
+        svg: `<svg viewBox="0 0 120 120" class="w-24 h-24 mx-auto rounded-2xl bg-[#2a2e32] p-2 border border-grayBorder">
+          <circle cx="60" cy="48" r="24" fill="#f3c69f"/>
+          <path d="M36 44 C36 22, 84 22, 84 44 C82 32, 38 32, 36 44 Z" fill="#e2b48d"/>
+          <circle cx="51" cy="46" r="2.6" fill="#1f2937"/>
+          <circle cx="69" cy="46" r="2.6" fill="#1f2937"/>
+          <path d="M52 58 Q60 64 68 58" stroke="#7c2d12" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+          <path d="M32 95 C32 76, 88 76, 88 95 Z" fill="#14b8a6"/>
+        </svg>`
+      },
+      {
+        id: 'susanna',
+        name: 'Susanna',
+        svg: `<svg viewBox="0 0 120 120" class="w-24 h-24 mx-auto rounded-2xl bg-[#2a2e32] p-2 border border-grayBorder">
+          <path d="M34 45 C30 20, 90 20, 86 45 L90 78 L30 78 Z" fill="#facc15"/>
+          <circle cx="60" cy="45" r="20" fill="#f6cfb0"/>
+          <circle cx="53" cy="43" r="2.4" fill="#1f2937"/>
+          <circle cx="67" cy="43" r="2.4" fill="#1f2937"/>
+          <path d="M54 53 Q60 58 66 53" stroke="#be123c" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+          <path d="M34 98 L40 72 L80 72 L86 98 Z" fill="#f6cfb0"/>
+          <path d="M40 78 L55 86 L42 92 Z" fill="#ec4899"/>
+          <path d="M80 78 L65 86 L78 92 Z" fill="#ec4899"/>
+          <line x1="55" y1="86" x2="65" y2="86" stroke="#ec4899" stroke-width="2.5"/>
+        </svg>`
+      },
+      {
+        id: 'tarrik',
+        name: 'Tarrik',
+        svg: `<svg viewBox="0 0 120 120" class="w-24 h-24 mx-auto rounded-2xl bg-[#2a2e32] p-2 border border-grayBorder">
+          <circle cx="60" cy="49" r="22" fill="#e0ac84"/>
+          <path d="M35 44 C32 24, 48 16, 60 22 C74 14, 90 25, 85 45 C78 34, 42 34, 35 44 Z" fill="#111827"/>
+          <circle cx="52" cy="46" r="2.5" fill="#111827"/>
+          <circle cx="68" cy="46" r="2.5" fill="#111827"/>
+          <rect x="54" y="53" width="12" height="4" rx="1.5" fill="#111827"/>
+          <path d="M32 95 C32 76, 88 76, 88 95 Z" fill="#4b5563"/>
+        </svg>`
+      },
+      {
+        id: 'sanna',
+        name: 'Sanna',
+        svg: `<svg viewBox="0 0 120 120" class="w-24 h-24 mx-auto rounded-2xl bg-[#2a2e32] p-2 border border-grayBorder">
+          <circle cx="60" cy="48" r="24" fill="#eec3a3"/>
+          <path d="M34 46 C34 22, 86 22, 86 46 C80 34, 40 34, 34 46 Z" fill="#9ca3af"/>
+          <circle cx="51" cy="46" r="2.5" fill="#1f2937"/>
+          <circle cx="69" cy="46" r="2.5" fill="#1f2937"/>
+          <path d="M53 58 Q60 54 67 58" stroke="#7c2d12" stroke-width="2.2" fill="none"/>
+          <path d="M26 95 C26 73, 94 73, 94 95 Z" fill="#7c3aed"/>
+        </svg>`
+      }
+    ];
+
+    const BOTS = [
+      {
+        id: 'larry',
+        name: 'Ларри',
+        elo: 200,
+        badge: 'Новичок',
+        desc: 'Скелет-новичок. Делает простые ходы и иногда зевает фигуры.',
+        depth: 1,
+        randomness: 0.65,
+        isBoss: false,
+        svg: `<svg viewBox="0 0 120 120" class="w-20 h-20 mx-auto rounded-2xl bg-[#23272a] p-2 border border-grayBorder">
+          <circle cx="60" cy="46" r="24" fill="#e5e7eb"/>
+          <rect x="47" y="62" width="26" height="14" rx="5" fill="#e5e7eb"/>
+          <circle cx="51" cy="45" r="5.5" fill="#111827"/>
+          <circle cx="69" cy="45" r="5.5" fill="#111827"/>
+          <path d="M51 70 L51 75 M57 70 L57 75 M63 70 L63 75 M69 70 L69 75" stroke="#111827" stroke-width="2"/>
+        </svg>`
+      },
+      {
+        id: 'goblin',
+        name: 'Гоблин',
+        elo: 500,
+        badge: 'Любитель',
+        desc: 'Хитрый гоблин. Любит быстрые атаки и размен фигур.',
+        depth: 1,
+        randomness: 0.32,
+        isBoss: false,
+        svg: `<svg viewBox="0 0 120 120" class="w-20 h-20 mx-auto rounded-2xl bg-[#23272a] p-2 border border-grayBorder">
+          <polygon points="16,46 38,38 36,56" fill="#4ade80"/>
+          <polygon points="104,46 82,38 84,56" fill="#4ade80"/>
+          <circle cx="60" cy="52" r="23" fill="#22c55e"/>
+          <circle cx="51" cy="48" r="3.5" fill="#fef08a"/>
+          <circle cx="69" cy="48" r="3.5" fill="#fef08a"/>
+          <path d="M48 63 Q60 69 72 63" stroke="#14532d" stroke-width="2.5" fill="none"/>
+        </svg>`
+      },
+      {
+        id: 'mittens',
+        name: 'Mittens',
+        elo: 1000,
+        badge: 'Тактик',
+        desc: 'Коварный рыжий кот. Наказывает за каждую неточность.',
+        depth: 2,
+        randomness: 0.08,
+        isBoss: false,
+        svg: `<svg viewBox="0 0 120 120" class="w-20 h-20 mx-auto rounded-2xl bg-[#23272a] p-2 border border-amber-500/40">
+          <polygon points="34,42 42,18 55,36" fill="#f97316"/>
+          <polygon points="86,42 78,18 65,36" fill="#f97316"/>
+          <circle cx="60" cy="55" r="24" fill="#fb923c"/>
+          <circle cx="51" cy="51" r="4" fill="#111827"/>
+          <circle cx="69" cy="51" r="4" fill="#111827"/>
+          <polygon points="57,58 63,58 60,62" fill="#f43f5e"/>
+        </svg>`
+      },
+      {
+        id: 'boris',
+        name: 'Борис',
+        elo: 4500,
+        badge: 'Final Boss',
+        desc: 'Абсолютный чемпион в кроксах. Считает варианты без единой ошибки.',
+        depth: 3,
+        randomness: 0,
+        isBoss: true,
+        svg: `<svg viewBox="0 0 120 120" class="w-20 h-20 mx-auto rounded-2xl bg-red-950/50 p-2 border border-red-500">
+          <path d="M36 44 C36 22, 84 22, 84 44 Z" fill="#111827"/>
+          <circle cx="60" cy="48" r="19" fill="#f3c69f"/>
+          <circle cx="53" cy="46" r="2.4" fill="#111827"/>
+          <circle cx="67" cy="46" r="2.4" fill="#111827"/>
+          <path d="M54 56 Q60 60 66 56" stroke="#7c2d12" stroke-width="2" fill="none"/>
+          <rect x="34" y="76" width="52" height="26" rx="11" fill="#2dd4bf"/>
+          <circle cx="46" cy="87" r="2.5" fill="#115e59"/>
+          <circle cx="60" cy="87" r="2.5" fill="#115e59"/>
+          <circle cx="74" cy="87" r="2.5" fill="#115e59"/>
+        </svg>`
+      }
+    ];
+
+    const LESSONS = Array.from({ length: 100 }, (_, idx) => {
+      const num = idx + 1;
+      const presets = [
+        {
+          title: `Урок ${num}: Дебютный захват центра`,
+          fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+          expected: ['e2e4', 'd2d4'],
+          hint: 'Продвиньте королевскую или ферзевую пешку на два поля в центр (e4 или d4).'
+        },
+        {
+          title: `Урок ${num}: Развитие коня на активное поле`,
+          fen: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2',
+          expected: ['g1f3'],
+          hint: 'Выведите королевского коня на f3, атакуя центральную пешку e5.'
+        },
+        {
+          title: `Урок ${num}: Детский мат в один ход`,
+          fen: 'r1bqkb1r/pppp1ppp/2n2n2/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 4 4',
+          expected: ['h5f7'],
+          hint: 'Ферзь при поддержке слона на c4 может поставить мат на поле f7.'
+        },
+        {
+          title: `Урок ${num}: Мат по восьмой горизонтали`,
+          fen: '6k1/5ppp/8/8/8/8/5PPP/3R2K1 w - - 0 1',
+          expected: ['d1d8'],
+          hint: 'Опустите ладью на последнюю горизонталь d8, пользуясь форточкой чёрных.'
+        },
+        {
+          title: `Урок ${num}: Коневая вилка на короля и ферзя`,
+          fen: '4k3/3q4/8/4N3/8/8/8/4K3 w - - 0 1',
+          expected: ['e5c6', 'e5f7'],
+          hint: 'Найдите прыжок коня, который одновременно объявляет шах и нападает на ферзя.'
+        }
+      ];
+      const base = presets[idx % presets.length];
+      return { id: num, ...base };
+    });
+
+    const PIECE_SVGS = {
+      wP: `<svg viewBox="0 0 45 45" class="sq-piece"><path d="M22.5 9c-2.21 0-4 1.79-4 4 0 .89.29 1.71.78 2.38C17.33 16.5 16 18.59 16 21c0 2.03.94 3.84 2.41 5.03-3 1.06-7.41 5.55-7.41 13.47h23c0-7.92-4.41-12.41-7.41-13.47 1.47-1.19 2.41-3 2.41-5.03 0-2.41-1.33-4.5-3.28-5.62.49-.67.78-1.49.78-2.38 0-2.21-1.79-4-4-4z" fill="#fff" stroke="#111" stroke-width="1.8" stroke-linecap="round"/></svg>`,
+      bP: `<svg viewBox="0 0 45 45" class="sq-piece"><path d="M22.5 9c-2.21 0-4 1.79-4 4 0 .89.29 1.71.78 2.38C17.33 16.5 16 18.59 16 21c0 2.03.94 3.84 2.41 5.03-3 1.06-7.41 5.55-7.41 13.47h23c0-7.92-4.41-12.41-7.41-13.47 1.47-1.19 2.41-3 2.41-5.03 0-2.41-1.33-4.5-3.28-5.62.49-.67.78-1.49.78-2.38 0-2.21-1.79-4-4-4z" fill="#1e2022" stroke="#000" stroke-width="1.8" stroke-linecap="round"/></svg>`,
+      wR: `<svg viewBox="0 0 45 45" class="sq-piece"><g fill="#fff" stroke="#111" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 39h27v-3H9v3zM12 36v-4h21v4H12zM11 14V9h4v2h5V9h5v2h5V9h4v5"/><path d="M34 14l-3 3H14l-3-3"/><path d="M31 17v12.5H14V17"/><path d="M31 29.5l1.5 2.5h-20l1.5-2.5"/><path d="M11 14h23" fill="none"/></g></svg>`,
+      bR: `<svg viewBox="0 0 45 45" class="sq-piece"><g fill="#1e2022" stroke="#000" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 39h27v-3H9v3zM12.5 32l1.5-2.5h17l1.5 2.5h-20zM12 36v-4h21v4H12z"/><path d="M14 29.5v-13h17v13H14z"/><path d="M14 16.5L11 14h23l-3 2.5H14zM11 14V9h4v2h5V9h5v2h5V9h4v5H11z"/><path d="M12 35.5h21M13 31.5h19M14 29.5h17M14 16.5h17M11 14h23" fill="none" stroke="#ececec" stroke-width="1"/></g></svg>`,
+      wN: `<svg viewBox="0 0 45 45" class="sq-piece"><g fill="#fff" stroke="#111" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10c10.5 1 16.5 8 16 29H15c0-9 10-6.5 8-21"/><path d="M24 18c.38 2.91-5.55 7.37-8 9-3 2-2.82 4.34-5 4-1.042-.94 1.41-3.04 0-3-1 0 .19 1.23-1 2-1 0-4.003 1-4-4 0-2 6-12 6-12s1.89-1.9 2-3.5c-.73-.994-.5-2-.5-3 1-1 3 2.5 3 2.5h2s.78-1.992 2.5-3c1 0 1 3 1 3"/><circle cx="15" cy="15.5" r="1" fill="#111"/></g></svg>`,
+      bN: `<svg viewBox="0 0 45 45" class="sq-piece"><g fill="#1e2022" stroke="#000" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10c10.5 1 16.5 8 16 29H15c0-9 10-6.5 8-21"/><path d="M24 18c.38 2.91-5.55 7.37-8 9-3 2-2.82 4.34-5 4-1.042-.94 1.41-3.04 0-3-1 0 .19 1.23-1 2-1 0-4.003 1-4-4 0-2 6-12 6-12s1.89-1.9 2-3.5c-.73-.994-.5-2-.5-3 1-1 3 2.5 3 2.5h2s.78-1.992 2.5-3c1 0 1 3 1 3"/><circle cx="15" cy="15.5" r="1.2" fill="#ececec" stroke="none"/></g></svg>`,
+      wB: `<svg viewBox="0 0 45 45" class="sq-piece"><g fill="#fff" stroke="#111" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 36c3.39-.97 10.11.43 13.5-2 3.39 2.43 10.11 1.03 13.5 2 0 0 1.65.54 3 2-.68.97-1.65.99-3 .5-3.39-.97-10.11.46-13.5-1-3.39 1.46-10.11.03-13.5 1-1.35.49-2.32.47-3-.5 1.35-1.46 3-2 3-2z"/><path d="M15 32c2.5 2.5 12.5 2.5 15 0 .5-1.5 0-2 0-2 0-2.5-2.5-4-2.5-4 5.5-1.5 6-11.5-5-15.5-11 4-10.5 14-5 15.5 0 0-2.5 1.5-2.5 4 0 0-.5.5 0 2z"/><circle cx="22.5" cy="8" r="2.5"/><path d="M17.5 26h10M15 30h15M22.5 15.5v5M20 18h5" fill="none"/></g></svg>`,
+      bB: `<svg viewBox="0 0 45 45" class="sq-piece"><g fill="#1e2022" stroke="#000" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 36c3.39-.97 10.11.43 13.5-2 3.39 2.43 10.11 1.03 13.5 2 0 0 1.65.54 3 2-.68.97-1.65.99-3 .5-3.39-.97-10.11.46-13.5-1-3.39 1.46-10.11.03-13.5 1-1.35.49-2.32.47-3-.5 1.35-1.46 3-2 3-2z"/><path d="M15 32c2.5 2.5 12.5 2.5 15 0 .5-1.5 0-2 0-2 0-2.5-2.5-4-2.5-4 5.5-1.5 6-11.5-5-15.5-11 4-10.5 14-5 15.5 0 0-2.5 1.5-2.5 4 0 0-.5.5 0 2z"/><circle cx="22.5" cy="8" r="2.5"/><path d="M17.5 26h10M15 30h15M22.5 15.5v5M20 18h5" fill="none" stroke="#ececec" stroke-width="1.4"/></g></svg>`,
+      wQ: `<svg viewBox="0 0 45 45" class="sq-piece"><g fill="#fff" stroke="#111" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="12" r="2.5"/><circle cx="14" cy="9" r="2.5"/><circle cx="22.5" cy="8" r="2.5"/><circle cx="31" cy="9" r="2.5"/><circle cx="39" cy="12" r="2.5"/><path d="M9 26c8.5-1.5 21-1.5 27 0l2-12-7 11V11l-5.5 13.5-3-15-3 15-5.5-14V25L7 14l2 12z"/><path d="M9 26c0 2 1.5 2 2.5 4 1 1.5 1 1 .5 3.5-1.5 1-1.5 2.5-1.5 2.5-1.5 1.5.5 2.5.5 2.5 6.5 1 16.5 1 23 0 0 0 1.5-1 0-2.5 0 0 .5-1.5-1-2.5-.5-2.5-.5-2 .5-3.5 1-2 2.5-2 2.5-4-8.5-1.5-18.5-1.5-27 0z"/></g></svg>`,
+      bQ: `<svg viewBox="0 0 45 45" class="sq-piece"><g fill="#1e2022" stroke="#000" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="12" r="2.5"/><circle cx="14" cy="9" r="2.5"/><circle cx="22.5" cy="8" r="2.5"/><circle cx="31" cy="9" r="2.5"/><circle cx="39" cy="12" r="2.5"/><path d="M9 26c8.5-1.5 21-1.5 27 0l2.5-12.5L31 25l-.3-14.1-5.2 13.6-3-14.5-3 14.5-5.2-13.6L14 25 6.5 13.5 9 26z"/><path d="M9 26c0 2 1.5 2 2.5 4 1 1.5 1 1 .5 3.5-1.5 1-1.5 2.5-1.5 2.5-1.5 1.5.5 2.5.5 2.5 6.5 1 16.5 1 23 0 0 0 1.5-1 0-2.5 0 0 .5-1.5-1-2.5-.5-2.5-.5-2 .5-3.5 1-2 2.5-2 2.5-4-8.5-1.5-18.5-1.5-27 0z"/><path d="M11 30h23M12 33.5h21" fill="none" stroke="#ececec" stroke-width="1.2"/></g></svg>`,
+      wK: `<svg viewBox="0 0 45 45" class="sq-piece"><g fill="#fff" stroke="#111" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22.5 11.63V6M20 8h5" fill="none"/><path d="M22.5 25s4.5-7.5 3-10.5c0 0-1-2.5-3-2.5s-3 2.5-3 2.5c-1.5 3 3 10.5 3 10.5"/><path d="M11.5 37c5.5 3.5 15.5 3.5 21 0v-7s9-4.5 6-10.5c-4-6.5-13.5-3.5-16 4V27v-3.5c-3.5-7.5-13-10.5-16-4-3 6 5 10 5 10V37z"/><path d="M11.5 30c5.5-3 15.5-3 21 0M11.5 33.5c5.5-3 15.5-3 21 0M11.5 37c5.5-3 15.5-3 21 0" fill="none"/></g></svg>`,
+      bK: `<svg viewBox="0 0 45 45" class="sq-piece"><g fill="#1e2022" stroke="#000" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22.5 11.63V6M20 8h5" fill="none" stroke="#111"/><path d="M22.5 25s4.5-7.5 3-10.5c0 0-1-2.5-3-2.5s-3 2.5-3 2.5c-1.5 3 3 10.5 3 10.5"/><path d="M11.5 37c5.5 3.5 15.5 3.5 21 0v-7s9-4.5 6-10.5c-4-6.5-13.5-3.5-16 4V27v-3.5c-3.5-7.5-13-10.5-16-4-3 6 5 10 5 10V37z"/><path d="M11.5 30c5.5-3 15.5-3 21 0M11.5 33.5c5.5-3 15.5-3 21 0M11.5 37c5.5-3 15.5-3 21 0" fill="none" stroke="#ececec" stroke-width="1.2"/></g></svg>`
+    };
+
+    const state = {
+      path: window.location.pathname || '/',
+      currentUser: null,
+      authTab: 'login',
+      onboardingStep: null,
+      coachCarouselIdx: 0,
+      usersMap: {},
+      bansMap: {},
+      userArchives: {},
+      siteSettings: { maintenance: false },
+      selectedTimeControl: 10,
+      selectedRated: true,
+      isSearchingMatch: false,
+      friendChallengeMode: false,
+      friendChallengeSearch: '',
+      friendChallengeTarget: null,
+      activeGameId: null,
+      activeGame: null,
+      selectedSquare: null,
+      legalTargets: [],
+      dragFromSquare: null,
+      replayMoveIndex: null,
+      showGameSummaryModal: false,
+      openPlayerMenuSide: null,
+      leaderboardTime: 10,
+      selectedBotId: 'larry',
+      botThinkEnabled: true,
+      selectedLessonId: 1,
+      lessonFen: LESSONS[0].fen,
+      lessonStatus: 'neutral',
+      lessonMessage: LESSONS[0].hint,
+      searchPopoverOpen: false,
+      searchPopoverQuery: '',
+      adminBanSearch: '',
+      adminBanTargetUid: null,
+      adminTitleSearch: '',
+      adminTitleTargetUid: null,
+      adminSelectedTitles: [],
+      adminNickSearch: '',
+      adminNickTargetUid: null,
+      adminEloSearch: '',
+      adminEloTargetUid: null,
+      adminDeleteSearch: '',
+      adminDeleteTargetUid: null,
+      botThinking: false
+    };
+    window.state = state;
+    window.COACHES = COACHES;
+    window.BOTS = BOTS;
+    window.LESSONS = LESSONS;
+    window.FM_TRACKS = FM_TRACKS;
+
+    window.toggleSearchPopover = function(forceState) {
+      state.searchPopoverOpen = typeof forceState === 'boolean' ? forceState : !state.searchPopoverOpen;
+      renderApp();
+    };
+
+    window.setSearchPopoverQuery = function(val) {
+      state.searchPopoverQuery = val;
+      renderApp();
+      const inp = document.getElementById('top-search-popover-input');
+      if (inp) {
+        inp.focus();
+        inp.setSelectionRange(val.length, val.length);
+      }
+    };
+
+    window.stepCoachCarousel = function(delta) {
+      state.coachCarouselIdx = (state.coachCarouselIdx + delta + COACHES.length) % COACHES.length;
+      renderApp();
+    };
+
+    window.setLeaderboardTime = function(mins) {
+      state.leaderboardTime = mins;
+      renderApp();
+    };
+
+    window.setSelectedTimeControl = function(mins) {
+      state.selectedTimeControl = mins;
+      renderApp();
+    };
+
+    window.setSelectedRated = function(val) {
+      state.selectedRated = Boolean(val);
+      renderApp();
+    };
+
+    window.setFriendChallengeMode = function(val) {
+      state.friendChallengeMode = Boolean(val);
+      state.friendChallengeTarget = null;
+      state.friendChallengeSearch = '';
+      renderApp();
+    };
+
+    window.setFriendChallengeSearch = function(val) {
+      state.friendChallengeSearch = val;
+      renderApp();
+      const inp = document.getElementById('friend-challenge-search-input');
+      if (inp) {
+        inp.focus();
+        inp.setSelectionRange(val.length, val.length);
+      }
+    };
+
+    window.selectFriendChallengeTarget = function(uid) {
+      state.friendChallengeTarget = state.usersMap[uid] || null;
+      renderApp();
+    };
+
+    window.setSelectedBotId = function(botId) {
+      state.selectedBotId = botId;
+      renderApp();
+    };
+
+    window.setBotThinkEnabled = function(val) {
+      state.botThinkEnabled = Boolean(val);
+      renderApp();
+    };
+
+    window.closeGameSummaryModal = function() {
+      state.showGameSummaryModal = false;
+      renderApp();
+    };
+
+    window.clearAdminSelectedTitles = function() {
+      state.adminSelectedTitles = [];
+      renderApp();
+    };
+
+    window.setAuthTab = function(tab) {
+      state.authTab = tab === 'register' ? 'register' : 'login';
+      renderApp();
+    };
+
+    window.togglePlayerMenuSide = function(side) {
+      state.openPlayerMenuSide = state.openPlayerMenuSide === side ? null : side;
+      renderApp();
+    };
+
+    window.sendFriendChallenge = async function() {
+      if (!state.currentUser) return;
+      const target = state.friendChallengeTarget;
+      if (!target) {
+        showToast('Выберите игрока из списка', 'error');
+        return;
+      }
+      if (!isUserOnline(target)) {
+        showToast('Приглашать можно только игроков, которые сейчас в сети', 'error');
+        return;
+      }
+      const chRef = push(ref(rtdb, 'bc_challenges'));
+      await set(chRef, {
+        id: chRef.key,
+        fromUid: state.currentUser.uid,
+        fromNick: state.currentUser.nick,
+        toUid: target.uid,
+        timeControl: state.selectedTimeControl || 10,
+        rated: Boolean(state.selectedRated),
+        status: 'pending',
+        createdAt: Date.now()
+      });
+      showToast(`Вызов отправлен игроку ${target.nick}!`);
+      state.friendChallengeMode = false;
+      state.friendChallengeTarget = null;
+      renderApp();
+    };
+
+    window.addFriendByUid = async function(targetUid) {
+      if (!state.currentUser || !targetUid || targetUid === state.currentUser.uid) return;
+      const myUid = state.currentUser.uid;
+      await update(ref(rtdb), {
+        [`bc_users/${myUid}/friends/${targetUid}`]: true,
+        [`bc_users/${targetUid}/friends/${myUid}`]: true
+      });
+      showToast('Игрок добавлен в друзья!');
+    };
+
+    window.removeFriendByUid = async function(targetUid) {
+      if (!state.currentUser || !targetUid) return;
+      const myUid = state.currentUser.uid;
+      await update(ref(rtdb), {
+        [`bc_users/${myUid}/friends/${targetUid}`]: null,
+        [`bc_users/${targetUid}/friends/${myUid}`]: null
+      });
+      showToast('Игрок удалён из друзей');
+    };
+
+    window.sendGameChatMessage = async function(event) {
+      if (event) event.preventDefault();
+      const g = state.activeGame;
+      if (!g || !g.id || !state.currentUser) return;
+      const inp = document.getElementById('game-chat-input');
+      const text = (inp?.value || '').trim();
+      if (!text) return;
+      if (inp) inp.value = '';
+      const msgRef = push(ref(rtdb, `bc_games/${g.id}/chat`));
+      await set(msgRef, {
+        uid: state.currentUser.uid,
+        nick: state.currentUser.nick,
+        text,
+        ts: Date.now()
+      });
+    };
+
+    let unsubGame = null;
+    let clockInterval = null;
+    let fmAudioCtx = null;
+    let fmSynthTimer = null;
+    let fmIsLocallyPlaying = false;
+    let fmCurrentTrackId = 0;
+    let fmNoteStep = 0;
+    let shownFriendNotifs = new Set();
+    let handledGameRedirects = new Set();
+    let lastSoundMoveCount = -1;
+
+    function playChessPieceSound(isCapture = false) {
+      try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return;
+        const ctx = new AudioCtx();
+        const now = ctx.currentTime;
+
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(isCapture ? 210 : 165, now);
+        osc.frequency.exponentialRampToValueAtTime(isCapture ? 55 : 48, now + 0.085);
+
+        gain.gain.setValueAtTime(0.45, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.095);
+
+        const bufSize = Math.floor(ctx.sampleRate * 0.04);
+        const noiseBuf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+        const data = noiseBuf.getChannelData(0);
+        for (let i = 0; i < bufSize; i++) {
+          data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufSize * 0.35));
+        }
+        const noise = ctx.createBufferSource();
+        noise.buffer = noiseBuf;
+        const filter = ctx.createBiquadFilter();
+        filter.type = 'bandpass';
+        filter.frequency.value = isCapture ? 1350 : 950;
+        const nGain = ctx.createGain();
+        nGain.gain.setValueAtTime(isCapture ? 0.38 : 0.24, now);
+        nGain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
+
+        noise.connect(filter);
+        filter.connect(nGain);
+        nGain.connect(ctx.destination);
+        noise.start(now);
+        setTimeout(() => { ctx.close().catch(() => {}); }, 160);
+      } catch (e) {}
+    }
+
+    function escapeHtml(str) {
+      return String(str ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function escapeJsAttr(str) {
+      return String(str ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    }
+
+    function normalizeNick(str) {
+      return String(str || '').trim().replace(/^@+/, '').toLowerCase();
+    }
+
+    function isUserOnline(u) {
+      if (!u) return false;
+      if (u.online === true && u.lastSeen && Date.now() - u.lastSeen < 120000) return true;
+      return Boolean(u.lastSeen && Date.now() - u.lastSeen < 45000);
+    }
+
+    function getUserTitlesArray(u) {
+      if (!u) return [];
+      const raw = Array.isArray(u) ? u : (Array.isArray(u.titles) ? u.titles : (u.title ? [u.title] : []));
+      return [...new Set(raw.map(t => String(t || '').trim().toUpperCase()).filter(t => CHESS_TITLES.includes(t)))];
+    }
+
+    function renderTitleBadge(u) {
+      const list = getUserTitlesArray(u);
+      if (list.length === 0) return '';
+      return list.map(t => `<span class="inline-flex items-center px-1.5 py-0.5 rounded bg-[#991b1b] text-white text-[10px] font-black tracking-wide leading-none mr-1">${escapeHtml(t)}</span>`).join('');
+    }
+
+    function getUserRatingForTime(u, tc) {
+      if (!u) return 500;
+      const key = `elo${tc}`;
+      return typeof u[key] === 'number' ? u[key] : 500;
+    }
+
+    function getActiveBan(uid) {
+      if (!uid || !state.bansMap) return null;
+      const b = state.bansMap[uid];
+      if (!b) return null;
+      if (b.expiresAt !== 'forever' && Number(b.expiresAt) <= Date.now()) return null;
+      return b;
+    }
+
+    function formatBanDuration(exp) {
+      if (exp === 'forever') return 'Навсегда';
+      const diff = Number(exp) - Date.now();
+      if (diff <= 0) return 'Истёк';
+      const hours = Math.ceil(diff / 3600000);
+      if (hours < 24) return `осталось ~${hours} ч.`;
+      const days = Math.ceil(diff / 86400000);
+      return `осталось ~${days} дн.`;
+    }
+
+    function showToast(msg, type = 'ok') {
+      const root = document.getElementById('toast-root');
+      if (!root) return;
+      const el = document.createElement('div');
+      el.className = `pointer-events-auto px-4 py-2.5 rounded-xl text-xs font-extrabold shadow-2xl border ${
+        type === 'error'
+          ? 'bg-red-950/95 border-red-500 text-red-100'
+          : 'bg-grayNav/95 border-tealAccent text-white'
+      }`;
+      el.textContent = msg;
+      root.appendChild(el);
+      setTimeout(() => { el.remove(); }, 3400);
+    }
+
+    window.navigate = function(newPath) {
+      if (!newPath.startsWith('/')) newPath = '/' + newPath;
+      if (state.path !== newPath) {
+        window.history.pushState({}, '', newPath);
+        state.path = newPath;
+      }
+      state.searchPopoverOpen = false;
+      renderApp();
+    };
+
+    window.addEventListener('popstate', () => {
+      state.path = window.location.pathname || '/';
+      renderApp();
+    });
+
+    function saveLocalSession(userObj) {
+      try {
+        if (userObj) localStorage.setItem(LS_LOCAL_USER, JSON.stringify(userObj));
+        else localStorage.removeItem(LS_LOCAL_USER);
+      } catch (e) {}
+    }
+
+    function loadLocalSession() {
+      try {
+        const raw = localStorage.getItem(LS_LOCAL_USER);
+        return raw ? JSON.parse(raw) : null;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    async function ensureGlobalEloResetOnce(usersObj) {
+      try {
+        if (localStorage.getItem(LS_ELO_RESET_DONE) === ELO_RESET_VERSION) return;
+        const flagSnap = await get(ref(rtdb, `bc_meta/${ELO_RESET_VERSION}`));
+        if (!flagSnap.exists() && usersObj) {
+          const updates = {};
+          Object.keys(usersObj).forEach(uid => {
+            updates[`bc_users/${uid}/elo1`] = 500;
+            updates[`bc_users/${uid}/elo3`] = 500;
+            updates[`bc_users/${uid}/elo10`] = 500;
+            updates[`bc_users/${uid}/gamesPlayed`] = 0;
+          });
+          updates[`bc_meta/${ELO_RESET_VERSION}`] = Date.now();
+          await update(ref(rtdb), updates);
+        }
+        localStorage.setItem(LS_ELO_RESET_DONE, ELO_RESET_VERSION);
+      } catch (e) {}
+    }
+
+    function initRealtimeListeners() {
+      onValue(ref(rtdb, 'bc_users'), (snap) => {
+        const data = snap.val() || {};
+        state.usersMap = data;
+        ensureGlobalEloResetOnce(data);
+        if (state.currentUser && data[state.currentUser.uid]) {
+          const prevFriends = state.currentUser.friends || {};
+          const merged = { ...state.currentUser, ...data[state.currentUser.uid] };
+          state.currentUser = merged;
+          saveLocalSession(merged);
+          const nextFriends = merged.friends || {};
+          Object.keys(nextFriends).forEach(fUid => {
+            if (!prevFriends[fUid] && !shownFriendNotifs.has(fUid)) {
+              shownFriendNotifs.add(fUid);
+              const friendUser = data[fUid];
+              if (friendUser && friendUser.nick) {
+                showFriendPopup(friendUser);
+              }
+            }
+          });
+        }
+        renderApp();
+      });
+
+      onValue(ref(rtdb, 'bc_bans'), (snap) => {
+        state.bansMap = snap.val() || {};
+        renderApp();
+      });
+
+      onValue(ref(rtdb, 'bc_site_settings'), (snap) => {
+        state.siteSettings = snap.val() || { maintenance: false };
+        renderApp();
+      });
+
+      onValue(ref(rtdb, 'bc_archives'), (snap) => {
+        state.userArchives = snap.val() || {};
+        if (state.path.startsWith('/@')) renderApp();
+      });
+
+      onValue(ref(rtdb, 'bc_challenges'), (snap) => {
+        if (!state.currentUser) return;
+        const list = snap.val() || {};
+        const myUid = state.currentUser.uid;
+        const incoming = Object.values(list).filter(c => c && c.toUid === myUid && c.status === 'pending');
+        renderChallengePopups(incoming);
+      });
+
+      onValue(ref(rtdb, 'bc_rematches'), (snap) => {
+        if (!state.currentUser) return;
+        const list = snap.val() || {};
+        const myUid = state.currentUser.uid;
+        const incoming = Object.values(list).filter(r => r && r.toUid === myUid && r.status === 'pending');
+        renderRematchPopups(incoming);
+      });
+
+      onValue(ref(rtdb, 'bc_games'), (snap) => {
+        if (!state.currentUser) return;
+        const games = snap.val() || {};
+        const myUid = state.currentUser.uid;
+        const myActiveGames = Object.values(games)
+          .filter(g => g && g.status === 'active' && (g.whiteUid === myUid || g.blackUid === myUid))
+          .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+        const newestActive = myActiveGames[0];
+        if (!newestActive) return;
+
+        // Никогда не перекидываем автоматически в старую игру с ботом;
+        // автоматически открываем только свежие PvP-партии (созданные не более 2 минут назад), в которые ещё не входили
+        if (
+          newestActive.mode === 'pvp' &&
+          !handledGameRedirects.has(newestActive.id) &&
+          Date.now() - (newestActive.createdAt || 0) < 120000
+        ) {
+          handledGameRedirects.add(newestActive.id);
+          state.isSearchingMatch = false;
+          joinActiveGameListener(newestActive.id);
+        }
+      });
+    }
+
+    function showFriendPopup(friendUser) {
+      const root = document.getElementById('popup-root');
+      if (!root) return;
+      const card = document.createElement('div');
+      card.className = 'pointer-events-auto rounded-2xl bg-grayNav border border-tealAccent p-3.5 shadow-2xl flex items-center justify-between gap-3';
+      card.innerHTML = `
+        <div class="text-xs">
+          <div class="font-extrabold text-tealBright">Новый друг!</div>
+          <div class="text-white mt-0.5">${renderTitleBadge(friendUser)}<b>${escapeHtml(friendUser.nick)}</b> теперь в списке друзей</div>
+        </div>
+        <button type="button" onclick="this.parentElement.remove()" class="text-gray-400 hover:text-white text-xs font-bold px-2 py-1 cursor-pointer">✕</button>
+      `;
+      root.appendChild(card);
+      setTimeout(() => { card.remove(); }, 5000);
+    }
+
+    function renderChallengePopups(incomingList) {
+      const root = document.getElementById('popup-root');
+      if (!root) return;
+      root.querySelectorAll('.challenge-card').forEach(el => el.remove());
+      incomingList.forEach(ch => {
+        const fromUser = state.usersMap[ch.fromUid];
+        const elo = getUserRatingForTime(fromUser, ch.timeControl || 10);
+        const card = document.createElement('div');
+        card.className = 'challenge-card pointer-events-auto rounded-2xl bg-grayNav border border-tealAccent p-3.5 shadow-2xl space-y-2.5';
+        card.innerHTML = `
+          <div class="text-xs text-white">
+            Вас приглашает ${renderTitleBadge(fromUser)}<b>${escapeHtml(ch.fromNick || 'Игрок')}</b>
+            <span class="text-tealAccent font-bold">(${elo} Эло)</span> • ${ch.timeControl} мин ${ch.rated ? '• Рейтинг' : ''}
+          </div>
+          <div class="flex gap-2">
+            <button type="button" onclick="window.acceptChallenge('${escapeJsAttr(ch.id)}')"
+                    class="flex-1 py-1.5 rounded-xl bg-tealAccent text-black text-xs font-extrabold cursor-pointer">Принять</button>
+            <button type="button" onclick="window.declineChallenge('${escapeJsAttr(ch.id)}')"
+                    class="px-3 py-1.5 rounded-xl bg-grayCard text-gray-300 text-xs font-bold cursor-pointer">Отклонить</button>
+          </div>
+        `;
+        root.appendChild(card);
+      });
+    }
+
+    function renderRematchPopups(incomingList) {
+      const root = document.getElementById('popup-root');
+      if (!root) return;
+      root.querySelectorAll('.rematch-card').forEach(el => el.remove());
+      incomingList.forEach(rm => {
+        const fromUser = state.usersMap[rm.fromUid];
+        const card = document.createElement('div');
+        card.className = 'rematch-card pointer-events-auto rounded-2xl bg-grayNav border border-amber-400 p-3.5 shadow-2xl space-y-2.5';
+        card.innerHTML = `
+          <div class="text-xs text-white">
+            Реванш! ${renderTitleBadge(fromUser)}<b>${escapeHtml(rm.fromNick || 'Игрок')}</b> предлагает сыграть снова (${rm.timeControl} мин)
+          </div>
+          <div class="flex gap-2">
+            <button type="button" onclick="window.acceptRematch('${escapeJsAttr(rm.id)}')"
+                    class="flex-1 py-1.5 rounded-xl bg-tealAccent text-black text-xs font-extrabold cursor-pointer">Согласиться</button>
+            <button type="button" onclick="window.declineRematch('${escapeJsAttr(rm.id)}')"
+                    class="px-3 py-1.5 rounded-xl bg-grayCard text-gray-300 text-xs font-bold cursor-pointer">Отказать</button>
+          </div>
+        `;
+        root.appendChild(card);
+      });
+    }
+
+    function stopFmSynthPlayback() {
+      fmIsLocallyPlaying = false;
+      if (fmSynthTimer) {
+        clearInterval(fmSynthTimer);
+        fmSynthTimer = null;
+      }
+      if (fmAudioCtx) {
+        fmAudioCtx.close().catch(() => {});
+        fmAudioCtx = null;
+      }
+    }
+
+    function startFmSynthPlayback(startSec = 0, trackId = 0) {
+      stopFmSynthPlayback();
+      const track = FM_TRACKS[trackId] || FM_TRACKS[0];
+      fmCurrentTrackId = track.id;
+      fmIsLocallyPlaying = true;
+      fmNoteStep = Math.floor(startSec * 2);
+
+      try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return;
+        fmAudioCtx = new AudioCtx();
+      } catch (e) {
+        return;
+      }
+
+      const stepMs = Math.round((60 / track.bpm) * 500);
+      fmSynthTimer = setInterval(() => {
+        if (!fmIsLocallyPlaying || !fmAudioCtx) return;
+        try {
+          if (fmAudioCtx.state === 'suspended') fmAudioCtx.resume();
+          const now = fmAudioCtx.currentTime;
+          const freq = track.notes[fmNoteStep % track.notes.length];
+          fmNoteStep++;
+
+          const osc = fmAudioCtx.createOscillator();
+          const gain = fmAudioCtx.createGain();
+          osc.type = track.id === 3 ? 'sawtooth' : (track.id === 2 ? 'sine' : 'triangle');
+          osc.frequency.setValueAtTime(freq, now);
+
+          gain.gain.setValueAtTime(0.14, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + (stepMs / 1000) * 0.9);
+
+          osc.connect(gain);
+          gain.connect(fmAudioCtx.destination);
+          osc.start(now);
+          osc.stop(now + (stepMs / 1000) * 0.92);
+
+          if (fmNoteStep % 2 === 0) {
+            const kick = fmAudioCtx.createOscillator();
+            const kGain = fmAudioCtx.createGain();
+            kick.type = 'sine';
+            kick.frequency.setValueAtTime(115, now);
+            kick.frequency.exponentialRampToValueAtTime(36, now + 0.12);
+            kGain.gain.setValueAtTime(0.24, now);
+            kGain.gain.exponentialRampToValueAtTime(0.001, now + 0.13);
+            kick.connect(kGain);
+            kGain.connect(fmAudioCtx.destination);
+            kick.start(now);
+            kick.stop(now + 0.14);
+          }
+        } catch (e) {}
+      }, stepMs);
+    }
+
+    window.toggleFmPlayerPlay = async function() {
+      const g = state.activeGame;
+      if (!g || !g.id) return;
+      const curPlaying = Boolean(g.fmPlayer?.playing);
+      const nextPlaying = !curPlaying;
+      const pos = Number(g.fmPlayer?.positionSec || 0);
+      const trackId = Number(g.fmPlayer?.trackId || 0);
+      await update(ref(rtdb, `bc_games/${g.id}/fmPlayer`), {
+        playing: nextPlaying,
+        positionSec: pos,
+        trackId,
+        updatedAt: Date.now()
+      });
+    };
+
+    window.selectFmTrack = async function(trackId) {
+      const g = state.activeGame;
+      if (!g || !g.id) return;
+      const tid = Number(trackId) || 0;
+      await update(ref(rtdb, `bc_games/${g.id}/fmPlayer`), {
+        playing: true,
+        positionSec: 0,
+        trackId: tid,
+        updatedAt: Date.now()
+      });
+    };
+
+    window.seekFmPlayer = async function(secVal) {
+      const g = state.activeGame;
+      if (!g || !g.id) return;
+      const pos = Math.max(0, Math.min(180, Number(secVal) || 0));
+      const trackId = Number(g.fmPlayer?.trackId || 0);
+      await update(ref(rtdb, `bc_games/${g.id}/fmPlayer`), {
+        playing: Boolean(g.fmPlayer?.playing),
+        positionSec: pos,
+        trackId,
+        updatedAt: Date.now()
+      });
+    };
+
+    window.seekFmPlayer = async function(secVal) {
+      const g = state.activeGame;
+      if (!g || !g.id) return;
+      const pos = Math.max(0, Math.min(180, Number(secVal) || 0));
+      await update(ref(rtdb, `bc_games/${g.id}/fmPlayer`), {
+        playing: Boolean(g.fmPlayer?.playing),
+        positionSec: pos,
+        updatedAt: Date.now()
+      });
+    };
+
+    // =========================================================================
+    // АВТОРИЗАЦИЯ И ОНБОРДИНГ
+    // =========================================================================
+    window.handleGoogleSignIn = async function() {
+      try {
+        const provider = new GoogleAuthProvider();
+        const res = await signInWithPopup(auth, provider);
+        const fbUser = res.user;
+        const snap = await get(ref(rtdb, `bc_users/${fbUser.uid}`));
+        if (snap.exists()) {
+          const existing = snap.val();
+          state.currentUser = existing;
+          saveLocalSession(existing);
+          setupPresence(existing.uid);
+          if (!existing.nick) state.onboardingStep = 'nick';
+          else if (!existing.coachId) state.onboardingStep = 'coach';
+          else state.onboardingStep = null;
+        } else {
+          const draft = {
+            uid: fbUser.uid,
+            email: fbUser.email || '',
+            nick: '',
+            password: '',
+            coachId: '',
+            boardStyle: 'green',
+            publicArchive: true,
+            elo1: 500,
+            elo3: 500,
+            elo10: 500,
+            gamesPlayed: 0,
+            titles: [],
+            friends: {},
+            createdAt: Date.now(),
+            lastSeen: Date.now(),
+            online: true
+          };
+          await set(ref(rtdb, `bc_users/${fbUser.uid}`), draft);
+          state.currentUser = draft;
+          saveLocalSession(draft);
+          setupPresence(draft.uid);
+          state.onboardingStep = 'nick';
+        }
+        renderApp();
+      } catch (err) {
+        showToast('Ошибка входа Google: ' + (err?.message || ''), 'error');
+      }
+    };
+
+    window.handleCredentialsLogin = async function(event) {
+      if (event) event.preventDefault();
+      const idVal = (document.getElementById('login-identifier')?.value || '').trim();
+      const passVal = (document.getElementById('login-password')?.value || '').trim();
+      if (!idVal || !passVal) return;
+
+      const lower = idVal.toLowerCase();
+      const matched = Object.values(state.usersMap).find(u =>
+        u && ((u.nick && u.nick.toLowerCase() === lower) || (u.email && u.email.toLowerCase() === lower))
+      );
+
+      if (matched && matched.password === passVal) {
+        state.currentUser = matched;
+        saveLocalSession(matched);
+        setupPresence(matched.uid);
+        state.onboardingStep = !matched.nick ? 'nick' : (!matched.coachId ? 'coach' : null);
+        showToast(`Добро пожаловать, ${matched.nick || 'игрок'}!`);
+        renderApp();
+        return;
+      }
+
+      if (idVal.includes('@')) {
+        try {
+          const cred = await signInWithEmailAndPassword(auth, idVal, passVal);
+          const snap = await get(ref(rtdb, `bc_users/${cred.user.uid}`));
+          if (snap.exists()) {
+            state.currentUser = snap.val();
+            saveLocalSession(state.currentUser);
+            setupPresence(state.currentUser.uid);
+            renderApp();
+            return;
+          }
+        } catch (e) {}
+      }
+
+      showToast('Неверный никнейм, почта или пароль', 'error');
+    };
+
+    window.submitOnboardingNick = async function(event) {
+      if (event) event.preventDefault();
+      if (!state.currentUser) return;
+      const nick = (document.getElementById('onboard-nick')?.value || '').trim().replace(/^@+/, '');
+      const pass = (document.getElementById('onboard-pass')?.value || '').trim();
+      if (!/^[a-zA-Zа-яА-ЯёЁ0-9_]{3,10}$/.test(nick)) {
+        showToast('Ник должен содержать от 3 до 10 символов', 'error');
+        return;
+      }
+      if (pass.length < 4) {
+        showToast('Пароль должен быть не короче 4 символов', 'error');
+        return;
+      }
+      const taken = Object.values(state.usersMap).some(
+        u => u && u.uid !== state.currentUser.uid && normalizeNick(u.nick) === normalizeNick(nick)
+      );
+      if (taken) {
+        showToast('Этот никнейм уже занят', 'error');
+        return;
+      }
+      const updated = { ...state.currentUser, nick, nickLower: normalizeNick(nick), password: pass };
+      await update(ref(rtdb, `bc_users/${state.currentUser.uid}`), {
+        nick,
+        nickLower: normalizeNick(nick),
+        password: pass
+      });
+      state.currentUser = updated;
+      saveLocalSession(updated);
+      state.onboardingStep = 'coach';
+      renderApp();
+    };
+
+    window.selectOnboardingCoach = async function(coachId) {
+      if (!state.currentUser) return;
+      await update(ref(rtdb, `bc_users/${state.currentUser.uid}`), { coachId });
+      state.currentUser = { ...state.currentUser, coachId };
+      saveLocalSession(state.currentUser);
+      state.onboardingStep = null;
+      showToast('Тренер выбран!');
+      renderApp();
+    };
+
+    window.handleLogout = async function() {
+      if (state.currentUser?.uid) {
+        try {
+          await update(ref(rtdb, `bc_users/${state.currentUser.uid}`), { online: false, lastSeen: Date.now() });
+        } catch (e) {}
+      }
+      try { await signOut(auth); } catch (e) {}
+      state.currentUser = null;
+      state.onboardingStep = null;
+      saveLocalSession(null);
+      window.navigate('/');
+    };
+
+    function setupPresence(uid) {
+      if (!uid) return;
+      const uRef = ref(rtdb, `bc_users/${uid}`);
+      update(uRef, { online: true, lastSeen: Date.now() }).catch(() => {});
+      try {
+        onDisconnect(uRef).update({ online: false, lastSeen: Date.now() });
+      } catch (e) {}
+    }
+
+    setInterval(() => {
+      if (state.currentUser?.uid) {
+        update(ref(rtdb, `bc_users/${state.currentUser.uid}`), { online: true, lastSeen: Date.now() }).catch(() => {});
+      }
+    }, 25000);
+
+    // =========================================================================
+    // АДМИН-ПАНЕЛЬ (ТОЛЬКО ДЛЯ zoneboren@gmail.com)
+    // =========================================================================
+    function isCurrentUserAdmin() {
+      return Boolean(state.currentUser && String(state.currentUser.email || '').trim().toLowerCase() === ADMIN_EMAIL);
+    }
+
+    window.adminUpdateBanSearch = function(val) {
+      state.adminBanSearch = val;
+      state.adminBanTargetUid = null;
+      const q = normalizeNick(val);
+      if (q) {
+        const exact = Object.values(state.usersMap).find(u => u && normalizeNick(u.nick) === q);
+        if (exact) state.adminBanTargetUid = exact.uid;
+      }
+      renderApp();
+      const inp = document.getElementById('admin-ban-search-input');
+      if (inp) { inp.focus(); inp.setSelectionRange(val.length, val.length); }
+    };
+
+    window.adminSelectBanTarget = function(uid, nick) {
+      state.adminBanTargetUid = uid;
+      state.adminBanSearch = nick;
+      renderApp();
+    };
+
+    window.adminUpdateTitleSearch = function(val) {
+      state.adminTitleSearch = val;
+      state.adminTitleTargetUid = null;
+      const q = normalizeNick(val);
+      if (q) {
+        const exact = Object.values(state.usersMap).find(u => u && normalizeNick(u.nick) === q);
+        if (exact) {
+          state.adminTitleTargetUid = exact.uid;
+          state.adminSelectedTitles = getUserTitlesArray(exact);
+        }
+      }
+      renderApp();
+      const inp = document.getElementById('admin-title-search-input');
+      if (inp) { inp.focus(); inp.setSelectionRange(val.length, val.length); }
+    };
+
+    window.adminSelectTitleTarget = function(uid, nick) {
+      state.adminTitleTargetUid = uid;
+      state.adminTitleSearch = nick;
+      const u = state.usersMap[uid];
+      state.adminSelectedTitles = getUserTitlesArray(u);
+      renderApp();
+    };
+
+    window.adminToggleTitleChip = function(titleCode) {
+      const upper = String(titleCode || '').toUpperCase();
+      if (state.adminSelectedTitles.includes(upper)) {
+        state.adminSelectedTitles = state.adminSelectedTitles.filter(t => t !== upper);
+      } else {
+        state.adminSelectedTitles = [...state.adminSelectedTitles, upper];
+      }
+      renderApp();
+    };
+
+    window.adminUpdateNickSearch = function(val) {
+      state.adminNickSearch = val;
+      state.adminNickTargetUid = null;
+      const q = normalizeNick(val);
+      if (q) {
+        const exact = Object.values(state.usersMap).find(u => u && normalizeNick(u.nick) === q);
+        if (exact) state.adminNickTargetUid = exact.uid;
+      }
+      renderApp();
+      const inp = document.getElementById('admin-nick-search-input');
+      if (inp) { inp.focus(); inp.setSelectionRange(val.length, val.length); }
+    };
+
+    window.adminSelectNickTarget = function(uid, nick) {
+      state.adminNickTargetUid = uid;
+      state.adminNickSearch = nick;
+      renderApp();
+    };
+
+    window.adminUpdateEloSearch = function(val) {
+      state.adminEloSearch = val;
+      state.adminEloTargetUid = null;
+      const q = normalizeNick(val);
+      if (q) {
+        const exact = Object.values(state.usersMap).find(u => u && normalizeNick(u.nick) === q);
+        if (exact) state.adminEloTargetUid = exact.uid;
+      }
+      renderApp();
+      const inp = document.getElementById('admin-elo-search-input');
+      if (inp) { inp.focus(); inp.setSelectionRange(val.length, val.length); }
+    };
+
+    window.adminSelectEloTarget = function(uid, nick) {
+      state.adminEloTargetUid = uid;
+      state.adminEloSearch = nick;
+      renderApp();
+    };
+
+    window.adminSetUserElo = async function(event) {
+      if (event) event.preventDefault();
+      if (!isCurrentUserAdmin()) return;
+      let targetUid = state.adminEloTargetUid;
+      if (!targetUid && state.adminEloSearch) {
+        const q = normalizeNick(state.adminEloSearch);
+        const found = Object.values(state.usersMap).find(u => u && normalizeNick(u.nick) === q);
+        if (found) targetUid = found.uid;
+      }
+      if (!targetUid) {
+        showToast('Выберите игрока из списка подсказок', 'error');
+        return;
+      }
+      const newElo = Math.max(100, Math.min(9999, Math.round(Number(document.getElementById('admin-elo-val')?.value || 500))));
+      const tc = document.getElementById('admin-elo-tc')?.value || 'all';
+      try {
+        const patch = {};
+        if (tc === 'all') {
+          patch.elo1 = newElo;
+          patch.elo3 = newElo;
+          patch.elo10 = newElo;
+        } else {
+          patch[`elo${tc}`] = newElo;
+        }
+        await update(ref(rtdb, `bc_users/${targetUid}`), patch);
+        showToast(`Рейтинг игрока обновлён до ${newElo} Эло!`);
+        state.adminEloTargetUid = null;
+        state.adminEloSearch = '';
+        renderApp();
+      } catch (err) {
+        showToast('Ошибка изменения Эло: ' + (err?.message || ''), 'error');
+      }
+    };
+
+    window.adminIssueBan = async function(event) {
+      if (event) event.preventDefault();
+      if (!isCurrentUserAdmin()) return;
+      let targetUid = state.adminBanTargetUid;
+      if (!targetUid && state.adminBanSearch) {
+        const q = normalizeNick(state.adminBanSearch);
+        const found = Object.values(state.usersMap).find(u => u && normalizeNick(u.nick) === q);
+        if (found) targetUid = found.uid;
+      }
+      if (!targetUid) {
+        showToast('Выберите существующего игрока из списка', 'error');
+        return;
+      }
+      const reason = (document.getElementById('admin-ban-reason')?.value || '').trim() || 'Нарушение правил BurmalChess';
+      const dur = document.getElementById('admin-ban-duration')?.value || '1d';
+      const now = Date.now();
+      const mapMs = {
+        '1h': 3600 * 1000,
+        '1d': 86400 * 1000,
+        '7d': 7 * 86400 * 1000,
+        '12d': 12 * 86400 * 1000,
+        '30d': 30 * 86400 * 1000
+      };
+      const expiresAt = dur === 'forever' ? 'forever' : (now + (mapMs[dur] || 86400 * 1000));
+      const targetUser = state.usersMap[targetUid];
+
+      try {
+        await set(ref(rtdb, `bc_bans/${targetUid}`), {
+          uid: targetUid,
+          nick: targetUser?.nick || state.adminBanSearch || 'Игрок',
+          reason,
+          durationLabel: dur,
+          expiresAt,
+          bannedAt: now
+        });
+        state.adminBanTargetUid = null;
+        state.adminBanSearch = '';
+        showToast('Игрок успешно забанен!');
+        renderApp();
+      } catch (err) {
+        showToast('Ошибка выдачи бана: ' + (err?.message || ''), 'error');
+      }
+    };
+
+    window.adminUnbanUser = async function(uid) {
+      if (!isCurrentUserAdmin() || !uid) return;
+      try {
+        await remove(ref(rtdb, `bc_bans/${uid}`));
+        showToast('Бан снят!');
+        renderApp();
+      } catch (err) {
+        showToast('Ошибка снятия бана', 'error');
+      }
+    };
+
+    window.adminSaveTitles = async function(event) {
+      if (event) event.preventDefault();
+      if (!isCurrentUserAdmin()) return;
+      let targetUid = state.adminTitleTargetUid;
+      if (!targetUid && state.adminTitleSearch) {
+        const q = normalizeNick(state.adminTitleSearch);
+        const found = Object.values(state.usersMap).find(u => u && normalizeNick(u.nick) === q);
+        if (found) targetUid = found.uid;
+      }
+      if (!targetUid) {
+        showToast('Выберите игрока из списка подсказок', 'error');
+        return;
+      }
+      const titlesList = getUserTitlesArray(state.adminSelectedTitles);
+      try {
+        await update(ref(rtdb, `bc_users/${targetUid}`), {
+          titles: titlesList,
+          title: titlesList[0] || ''
+        });
+        showToast(titlesList.length > 0 ? `Сохранены приписки: ${titlesList.join(', ')}` : 'Все приписки сняты');
+        state.adminTitleTargetUid = null;
+        state.adminTitleSearch = '';
+        state.adminSelectedTitles = [];
+        renderApp();
+      } catch (err) {
+        showToast('Ошибка сохранения приписок: ' + (err?.message || ''), 'error');
+      }
+    };
+
+    window.adminForceChangeNick = async function(event) {
+      if (event) event.preventDefault();
+      if (!isCurrentUserAdmin()) return;
+      let targetUid = state.adminNickTargetUid;
+      if (!targetUid && state.adminNickSearch) {
+        const q = normalizeNick(state.adminNickSearch);
+        const found = Object.values(state.usersMap).find(u => u && normalizeNick(u.nick) === q);
+        if (found) targetUid = found.uid;
+      }
+      if (!targetUid) {
+        showToast('Выберите игрока из списка подсказок', 'error');
+        return;
+      }
+      const newNick = (document.getElementById('admin-force-nick-val')?.value || '').trim().replace(/^@+/, '');
+      if (!newNick) {
+        showToast('Введите новый никнейм', 'error');
+        return;
+      }
+      try {
+        await update(ref(rtdb, `bc_users/${targetUid}`), {
+          nick: newNick,
+          nickLower: normalizeNick(newNick)
+        });
+        showToast('Никнейм изменён администратором!');
+        state.adminNickTargetUid = null;
+        state.adminNickSearch = '';
+        renderApp();
+      } catch (err) {
+        showToast('Ошибка смены ника: ' + (err?.message || ''), 'error');
+      }
+    };
+
+    window.adminUpdateDeleteSearch = function(val) {
+      state.adminDeleteSearch = val;
+      state.adminDeleteTargetUid = null;
+      const q = normalizeNick(val);
+      if (q) {
+        const exact = Object.values(state.usersMap).find(u => u && normalizeNick(u.nick) === q);
+        if (exact) state.adminDeleteTargetUid = exact.uid;
+      }
+      renderApp();
+      const inp = document.getElementById('admin-delete-search-input');
+      if (inp) { inp.focus(); inp.setSelectionRange(val.length, val.length); }
+    };
+
+    window.adminSelectDeleteTarget = function(uid, nick) {
+      state.adminDeleteTargetUid = uid;
+      state.adminDeleteSearch = nick;
+      renderApp();
+    };
+
+    window.adminDeleteAccount = async function(event) {
+      if (event) event.preventDefault();
+      if (!isCurrentUserAdmin()) return;
+      let targetUid = state.adminDeleteTargetUid;
+      if (!targetUid && state.adminDeleteSearch) {
+        const q = normalizeNick(state.adminDeleteSearch);
+        const found = Object.values(state.usersMap).find(u => u && normalizeNick(u.nick) === q);
+        if (found) targetUid = found.uid;
+      }
+      if (!targetUid) {
+        showToast('Выберите аккаунт из списка подсказок', 'error');
+        return;
+      }
+      if (targetUid === state.currentUser?.uid) {
+        showToast('Нельзя удалить собственный аккаунт администратора', 'error');
+        return;
+      }
+      const targetUser = state.usersMap[targetUid];
+      try {
+        await update(ref(rtdb), {
+          [`bc_users/${targetUid}`]: null,
+          [`bc_bans/${targetUid}`]: null,
+          [`bc_archives/${targetUid}`]: null
+        });
+        showToast(`Аккаунт "${targetUser?.nick || ''}" удалён, никнейм теперь свободен!`);
+        state.adminDeleteTargetUid = null;
+        state.adminDeleteSearch = '';
+        renderApp();
+      } catch (err) {
+        showToast('Ошибка удаления аккаунта: ' + (err?.message || ''), 'error');
+      }
+    };
+
+    window.adminToggleMaintenance = async function(enableMaintenance) {
+      if (!isCurrentUserAdmin()) return;
+      const nextState = Boolean(enableMaintenance);
+      try {
+        await set(ref(rtdb, 'bc_site_settings/maintenance'), nextState);
+        if (nextState) {
+          const gamesSnap = await get(ref(rtdb, 'bc_games'));
+          const games = gamesSnap.val() || {};
+          const patch = {};
+          Object.values(games).forEach(g => {
+            if (g && g.status === 'active') {
+              patch[`bc_games/${g.id}/status`] = 'finished';
+              patch[`bc_games/${g.id}/summary`] = {
+                winner: 'draw',
+                reason: 'Технические работы на сайте (ничья)',
+                brilliant: 0,
+                best: 0,
+                good: 0,
+                durationSec: Math.max(1, Math.round((Date.now() - (g.createdAt || Date.now())) / 1000)),
+                whiteDelta: 0,
+                blackDelta: 0
+              };
+            }
+          });
+          if (Object.keys(patch).length > 0) {
+            await update(ref(rtdb), patch);
+          }
+          showToast('Сайт выключен для всех. Активные партии завершены вничью!');
+        } else {
+          showToast('Сайт снова включён для всех игроков!');
+        }
+        renderApp();
+      } catch (err) {
+        showToast('Ошибка переключения режима техработ', 'error');
+      }
+    };
+    window.acceptChallenge = async function(chId) {
+      const snap = await get(ref(rtdb, `bc_challenges/${chId}`));
+      if (!snap.exists()) return;
+      const ch = snap.val();
+      await remove(ref(rtdb, `bc_challenges/${chId}`));
+      const whiteIsSender = Math.random() < 0.5;
+      const whiteUid = whiteIsSender ? ch.fromUid : ch.toUid;
+      const blackUid = whiteIsSender ? ch.toUid : ch.fromUid;
+      const gameId = await createMultiplayerGame(whiteUid, blackUid, ch.timeControl || 10, Boolean(ch.rated));
+      handledGameRedirects.add(gameId);
+      joinActiveGameListener(gameId);
+    };
+
+    window.declineChallenge = async function(chId) {
+      await remove(ref(rtdb, `bc_challenges/${chId}`));
+    };
+
+    window.startMatchmaking = async function() {
+      if (!state.currentUser) return;
+      const myUid = state.currentUser.uid;
+      const tc = state.selectedTimeControl;
+      const queuePath = `bc_queue/${tc}`;
+
+      if (state.isSearchingMatch) {
+        state.isSearchingMatch = false;
+        await remove(ref(rtdb, `${queuePath}/${myUid}`));
+        renderApp();
+        return;
+      }
+
+      state.isSearchingMatch = true;
+      renderApp();
+
+      const snap = await get(ref(rtdb, queuePath));
+      const queue = snap.val() || {};
+      const opponentEntry = Object.values(queue).find(
+        q => q && q.uid !== myUid && Date.now() - q.joinedAt < 120000
+      );
+
+      if (opponentEntry) {
+        await remove(ref(rtdb, `${queuePath}/${opponentEntry.uid}`));
+        await remove(ref(rtdb, `${queuePath}/${myUid}`));
+        state.isSearchingMatch = false;
+        const whiteIsMe = Math.random() < 0.5;
+        const gameId = await createMultiplayerGame(
+          whiteIsMe ? myUid : opponentEntry.uid,
+          whiteIsMe ? opponentEntry.uid : myUid,
+          tc,
+          state.selectedRated
+        );
+        handledGameRedirects.add(gameId);
+        joinActiveGameListener(gameId);
+      } else {
+        const entryRef = ref(rtdb, `${queuePath}/${myUid}`);
+        await set(entryRef, {
+          uid: myUid,
+          nick: state.currentUser.nick,
+          joinedAt: Date.now()
+        });
+        try { onDisconnect(entryRef).remove(); } catch (e) {}
+      }
+    };
+
+    async function createMultiplayerGame(whiteUid, blackUid, timeControl, rated) {
+      const gameRef = push(ref(rtdb, 'bc_games'));
+      const gameId = gameRef.key;
+      const initialSec = timeControl * 60;
+      const gameObj = {
+        id: gameId,
+        mode: 'pvp',
+        status: 'active',
+        whiteUid,
+        blackUid,
+        timeControl,
+        rated,
+        fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+        moves: [],
+        lastMove: null,
+        whiteTimeMs: initialSec * 1000,
+        blackTimeMs: initialSec * 1000,
+        lastTurnTimestamp: Date.now(),
+        createdAt: Date.now(),
+        chat: {},
+        fmPlayer: { playing: false, positionSec: 0, trackId: 0, updatedAt: Date.now() }
+      };
+      await set(gameRef, gameObj);
+      return gameId;
+    }
+
+    // =========================================================================
+    // ИГРА С БОТАМИ (МИНИМАКС + АЛЬФА-БЕТА ПОИСК)
+    // =========================================================================
+    const PIECE_VALS = { p: 100, n: 320, b: 330, r: 500, q: 900, k: 20000 };
+
+    function evaluateBoard(chess) {
+      if (chess.in_checkmate()) return chess.turn() === 'w' ? -99999 : 99999;
+      if (chess.in_draw()) return 0;
+      const board = chess.board();
+      let score = 0;
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          const p = board[r][c];
+          if (!p) continue;
+          const val = PIECE_VALS[p.type] || 0;
+          const centerBonus = (3.5 - Math.abs(3.5 - r)) * 4 + (3.5 - Math.abs(3.5 - c)) * 4;
+          score += p.color === 'w' ? (val + centerBonus) : -(val + centerBonus);
+        }
+      }
+      return score;
+    }
+
+    function minimax(chess, depth, alpha, beta, isMaximizing) {
+      if (depth === 0 || chess.game_over()) return evaluateBoard(chess);
+      const moves = chess.moves({ verbose: true });
+      if (isMaximizing) {
+        let maxEval = -Infinity;
+        for (const m of moves) {
+          chess.move(m);
+          const ev = minimax(chess, depth - 1, alpha, beta, false);
+          chess.undo();
+          if (ev > maxEval) maxEval = ev;
+          if (ev > alpha) alpha = ev;
+          if (beta <= alpha) break;
+        }
+        return maxEval;
+      } else {
+        let minEval = Infinity;
+        for (const m of moves) {
+          chess.move(m);
+          const ev = minimax(chess, depth - 1, alpha, beta, true);
+          chess.undo();
+          if (ev < minEval) minEval = ev;
+          if (ev < beta) beta = ev;
+          if (beta <= alpha) break;
+        }
+        return minEval;
+      }
+    }
+
+    function computeBotMove(fen, botConfig) {
+      const chess = new Chess(fen);
+      const moves = chess.moves({ verbose: true });
+      if (moves.length === 0) return null;
+      if (botConfig.randomness > 0 && Math.random() < botConfig.randomness) {
+        return moves[Math.floor(Math.random() * moves.length)];
+      }
+      const isWhite = chess.turn() === 'w';
+      let bestMove = moves[0];
+      let bestScore = isWhite ? -Infinity : Infinity;
+      for (const m of moves) {
+        chess.move(m);
+        const score = minimax(chess, botConfig.depth - 1, -Infinity, Infinity, !isWhite);
+        chess.undo();
+        if (isWhite ? score > bestScore : score < bestScore) {
+          bestScore = score;
+          bestMove = m;
+        }
+      }
+      return bestMove;
+    }
+
+    window.startBotGame = async function(botId) {
+      if (!state.currentUser) return;
+      const targetBotId = botId || state.selectedBotId || 'larry';
+      const bot = BOTS.find(b => b.id === targetBotId) || BOTS[0];
+      state.selectedBotId = bot.id;
+      state.botThinking = false;
+      const gameRef = push(ref(rtdb, 'bc_games'));
+      const gameId = gameRef.key;
+      handledGameRedirects.add(gameId);
+      const gameObj = {
+        id: gameId,
+        mode: 'bot',
+        botId: bot.id,
+        botThinkEnabled: Boolean(state.botThinkEnabled),
+        status: 'active',
+        whiteUid: state.currentUser.uid,
+        blackUid: `bot_${bot.id}`,
+        timeControl: 0,
+        unlimitedTime: true,
+        rated: false,
+        fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+        moves: [],
+        lastMove: null,
+        whiteTimeMs: 0,
+        blackTimeMs: 0,
+        lastTurnTimestamp: Date.now(),
+        createdAt: Date.now(),
+        chat: {},
+        fmPlayer: { playing: false, positionSec: 0, trackId: 0, updatedAt: Date.now() }
+      };
+      await set(gameRef, gameObj);
+      joinActiveGameListener(gameId);
+    };
+
+    // =========================================================================
+    // УПРАВЛЕНИЕ АКТИВНОЙ ПАРТИЕЙ, ЧАСОМ И РЕЙТИНГОМ ЭЛО
+    // =========================================================================
+    function joinActiveGameListener(gameId) {
+      if (unsubGame) unsubGame();
+      state.activeGameId = gameId;
+      state.replayMoveIndex = null;
+      state.selectedSquare = null;
+      state.legalTargets = [];
+      state.dragFromSquare = null;
+      state.showGameSummaryModal = false;
+      lastSoundMoveCount = -1;
+
+      unsubGame = onValue(ref(rtdb, `bc_games/${gameId}`), (snap) => {
+        if (!snap.exists()) return;
+        const g = snap.val();
+        const prevStatus = state.activeGame?.status;
+        const movesArr = Array.isArray(g.moves) ? g.moves : [];
+
+        if (lastSoundMoveCount !== -1 && movesArr.length > lastSoundMoveCount) {
+          const lastM = movesArr[movesArr.length - 1];
+          const isCapture = Boolean(lastM?.san && lastM.san.includes('x'));
+          playChessPieceSound(isCapture);
+        }
+        lastSoundMoveCount = movesArr.length;
+
+        state.activeGame = g;
+
+        const wantTrackId = Number(g.fmPlayer?.trackId || 0);
+        if (g.fmPlayer?.playing && (!fmIsLocallyPlaying || fmCurrentTrackId !== wantTrackId)) {
+          startFmSynthPlayback(g.fmPlayer.positionSec || 0, wantTrackId);
+        } else if (!g.fmPlayer?.playing && fmIsLocallyPlaying) {
+          stopFmSynthPlayback();
+        }
+
+        if (prevStatus === 'active' && g.status === 'finished') {
+          state.showGameSummaryModal = true;
+          stopFmSynthPlayback();
+        }
+
+        if (!state.path.startsWith(`/game/${gameId}`)) {
+          window.navigate(`/game/${gameId}`);
+        } else {
+          renderApp();
+        }
+      });
+
+      startClockTicker();
+    }
+
+    function startClockTicker() {
+      if (clockInterval) clearInterval(clockInterval);
+      clockInterval = setInterval(async () => {
+        const g = state.activeGame;
+        if (!g || g.status !== 'active' || g.mode === 'bot' || g.unlimitedTime) return;
+        const chess = new Chess(g.fen);
+        const turn = chess.turn();
+        const elapsed = Date.now() - (g.lastTurnTimestamp || Date.now());
+
+        if (elapsed >= 30000) {
+          const winner = turn === 'w' ? 'black' : 'white';
+          await finishGameWithResult(g, winner, 'Бездействие более 30 секунд');
+          return;
+        }
+
+        const rem = (turn === 'w' ? g.whiteTimeMs : g.blackTimeMs) - elapsed;
+        if (rem <= 0) {
+          const winner = turn === 'w' ? 'black' : 'white';
+          await finishGameWithResult(g, winner, 'Время вышло');
+          return;
+        }
+
+        const topClock = document.getElementById('clock-top');
+        const botClock = document.getElementById('clock-bottom');
+        if (topClock && botClock) {
+          const amWhite = g.whiteUid === state.currentUser?.uid;
+          const wNow = turn === 'w' ? Math.max(0, g.whiteTimeMs - elapsed) : g.whiteTimeMs;
+          const bNow = turn === 'b' ? Math.max(0, g.blackTimeMs - elapsed) : g.blackTimeMs;
+          botClock.textContent = formatMs(amWhite ? wNow : bNow);
+          topClock.textContent = formatMs(amWhite ? bNow : wNow);
+        }
+      }, 250);
+    }
+
+    function formatMs(ms) {
+      const totalSec = Math.max(0, Math.ceil(ms / 1000));
+      const m = Math.floor(totalSec / 60);
+      const s = totalSec % 60;
+      return `${m}:${String(s).padStart(2, '0')}`;
+    }
+
+    function calculateEloDelta(myElo, oppElo, score, gamesPlayed) {
+      const expected = 1 / (1 + Math.pow(10, (oppElo - myElo) / 400));
+      const isCalibration = gamesPlayed < 8;
+      if (score === 1) {
+        const baseWin = isCalibration ? 95 : 22;
+        const upsetBonus = Math.max(0, Math.round((oppElo - myElo) / 14));
+        const jitter = Math.floor(Math.random() * (isCalibration ? 45 : 9));
+        return Math.min(isCalibration ? 195 : 48, Math.max(8, baseWin + upsetBonus + jitter));
+      } else if (score === 0) {
+        const baseLoss = isCalibration ? 65 : 20;
+        const favPenalty = Math.max(0, Math.round((myElo - oppElo) / 16));
+        const jitter = Math.floor(Math.random() * (isCalibration ? 25 : 7));
+        return -Math.min(isCalibration ? 140 : 45, Math.max(7, baseLoss + favPenalty + jitter));
+      }
+      return Math.round((isCalibration ? 40 : 12) * (0.5 - expected));
+    }
+
+    function computeBotThinkDelayMs(fen, botCfg) {
+      const chess = new Chess(fen);
+      const legalCount = chess.moves().length;
+      const inCheck = chess.in_check();
+      const baseByBot = {
+        larry: 500,
+        goblin: 950,
+        mittens: 1500,
+        boris: 2300
+      };
+      const base = baseByBot[botCfg.id] || 1000;
+      const complexityFactor = Math.min(1800, legalCount * 38) + (inCheck ? 450 : 0);
+      const variance = Math.floor(Math.random() * 750);
+      return base + complexityFactor + variance;
+    }
+
+    async function finishGameWithResult(g, winnerSide, reasonText) {
+      if (!g || g.status !== 'active') return;
+      const movesArr = Array.isArray(g.moves) ? g.moves : [];
+      const brilliant = Math.min(3, Math.floor(movesArr.length / 18));
+      const best = Math.max(1, Math.floor(movesArr.length / 4));
+      const good = Math.max(1, Math.floor(movesArr.length / 3));
+      const durationSec = Math.max(1, Math.round((Date.now() - (g.createdAt || Date.now())) / 1000));
+
+      let whiteDelta = 0;
+      let blackDelta = 0;
+      const wUser = state.usersMap[g.whiteUid];
+      const bUser = state.usersMap[g.blackUid];
+
+      if (g.rated && g.mode === 'pvp' && wUser && bUser) {
+        const tc = g.timeControl || 10;
+        const wElo = getUserRatingForTime(wUser, tc);
+        const bElo = getUserRatingForTime(bUser, tc);
+        const wScore = winnerSide === 'white' ? 1 : (winnerSide === 'draw' ? 0.5 : 0);
+        const bScore = 1 - wScore;
+        whiteDelta = calculateEloDelta(wElo, bElo, wScore, wUser.gamesPlayed || 0);
+        blackDelta = calculateEloDelta(bElo, wElo, bScore, bUser.gamesPlayed || 0);
+
+        await update(ref(rtdb), {
+          [`bc_users/${wUser.uid}/elo${tc}`]: Math.max(100, wElo + whiteDelta),
+          [`bc_users/${wUser.uid}/gamesPlayed`]: (wUser.gamesPlayed || 0) + 1,
+          [`bc_users/${bUser.uid}/elo${tc}`]: Math.max(100, bElo + blackDelta),
+          [`bc_users/${bUser.uid}/gamesPlayed`]: (bUser.gamesPlayed || 0) + 1
+        });
+      }
+
+      const summary = {
+        winner: winnerSide,
+        reason: reasonText,
+        brilliant,
+        best,
+        good,
+        durationSec,
+        whiteDelta,
+        blackDelta
+      };
+
+      await update(ref(rtdb, `bc_games/${g.id}`), {
+        status: 'finished',
+        summary
+      });
+
+      const archiveRecord = {
+        gameId: g.id,
+        whiteUid: g.whiteUid,
+        blackUid: g.blackUid,
+        whiteNick: wUser?.nick || 'Игрок',
+        blackNick: g.mode === 'bot' ? (BOTS.find(b => b.id === g.botId)?.name || 'Бот') : (bUser?.nick || 'Игрок'),
+        winner: winnerSide,
+        timeControl: g.timeControl,
+        moves: movesArr,
+        createdAt: Date.now()
+      };
+
+      if (wUser) await set(ref(rtdb, `bc_archives/${wUser.uid}/${g.id}`), archiveRecord);
+      if (bUser) await set(ref(rtdb, `bc_archives/${bUser.uid}/${g.id}`), archiveRecord);
+    }
+
+    window.handleSquareClick = function(sq) {
+      const g = state.activeGame;
+      if (!g || g.status !== 'active' || state.replayMoveIndex !== null) return;
+      const chess = new Chess(g.fen);
+      const amWhite = g.whiteUid === state.currentUser?.uid;
+      const myColor = amWhite ? 'w' : 'b';
+      if (chess.turn() !== myColor) return;
+
+      if (state.selectedSquare) {
+        if (state.legalTargets.includes(sq)) {
+          executePlayerMove(state.selectedSquare, sq);
+          return;
+        }
+      }
+
+      const piece = chess.get(sq);
+      if (piece && piece.color === myColor) {
+        state.selectedSquare = sq;
+        state.legalTargets = chess.moves({ square: sq, verbose: true }).map(m => m.to);
+      } else {
+        state.selectedSquare = null;
+        state.legalTargets = [];
+      }
+      renderApp();
+    };
+
+    window.handlePieceDragStart = function(ev, sq) {
+      state.dragFromSquare = sq;
+      state.selectedSquare = sq;
+      const g = state.activeGame;
+      if (g) {
+        const chess = new Chess(g.fen);
+        state.legalTargets = chess.moves({ square: sq, verbose: true }).map(m => m.to);
+      }
+      if (ev.dataTransfer) ev.dataTransfer.setData('text/plain', sq);
+    };
+
+    window.handleSquareDrop = function(ev, targetSq) {
+      ev.preventDefault();
+      const fromSq = state.dragFromSquare || ev.dataTransfer?.getData('text/plain');
+      state.dragFromSquare = null;
+      if (fromSq && fromSq !== targetSq) {
+        executePlayerMove(fromSq, targetSq);
+      }
+    };
+
+    async function executePlayerMove(fromSq, toSq) {
+      const g = state.activeGame;
+      if (!g || g.status !== 'active') return;
+      const chess = new Chess(g.fen);
+      const amWhite = g.whiteUid === state.currentUser?.uid;
+      const myColor = amWhite ? 'w' : 'b';
+      if (chess.turn() !== myColor) return;
+
+      const moveRes = chess.move({ from: fromSq, to: toSq, promotion: 'q' });
+      if (!moveRes) {
+        state.selectedSquare = null;
+        state.legalTargets = [];
+        renderApp();
+        return;
+      }
+
+      const now = Date.now();
+      const elapsed = now - (g.lastTurnTimestamp || now);
+      const newWhiteMs = amWhite ? Math.max(0, g.whiteTimeMs - elapsed) : g.whiteTimeMs;
+      const newBlackMs = !amWhite ? Math.max(0, g.blackTimeMs - elapsed) : g.blackTimeMs;
+      const prevMoves = Array.isArray(g.moves) ? g.moves : [];
+      const nextMoves = [...prevMoves, { from: fromSq, to: toSq, san: moveRes.san, fen: chess.fen() }];
+
+      state.selectedSquare = null;
+      state.legalTargets = [];
+
+      await update(ref(rtdb, `bc_games/${g.id}`), {
+        fen: chess.fen(),
+        moves: nextMoves,
+        lastMove: { from: fromSq, to: toSq },
+        whiteTimeMs: newWhiteMs,
+        blackTimeMs: newBlackMs,
+        lastTurnTimestamp: now
+      });
+
+      if (chess.game_over()) {
+        const winner = chess.in_checkmate() ? (amWhite ? 'white' : 'black') : 'draw';
+        const reason = chess.in_checkmate() ? 'Мат' : 'Ничья';
+        await finishGameWithResult({ ...g, moves: nextMoves }, winner, reason);
+        return;
+      }
+
+      if (g.mode === 'bot') {
+        const botCfg = BOTS.find(b => b.id === g.botId) || BOTS[0];
+        const useDelay = g.botThinkEnabled !== false;
+        const thinkMs = useDelay ? computeBotThinkDelayMs(chess.fen(), botCfg) : 60;
+        if (useDelay) {
+          state.botThinking = true;
+          renderApp();
+        }
+        setTimeout(async () => {
+          state.botThinking = false;
+          const freshSnap = await get(ref(rtdb, `bc_games/${g.id}`));
+          if (!freshSnap.exists()) return;
+          const fg = freshSnap.val();
+          if (fg.status !== 'active') return;
+          const bChess = new Chess(fg.fen);
+          if (bChess.turn() !== 'b') return;
+          const botMove = computeBotMove(fg.fen, botCfg);
+          if (!botMove) return;
+          bChess.move(botMove);
+          const bMoves = [...(Array.isArray(fg.moves) ? fg.moves : []), { from: botMove.from, to: botMove.to, san: botMove.san, fen: bChess.fen() }];
+          await update(ref(rtdb, `bc_games/${g.id}`), {
+            fen: bChess.fen(),
+            moves: bMoves,
+            lastMove: { from: botMove.from, to: botMove.to },
+            lastTurnTimestamp: Date.now()
+          });
+          if (bChess.game_over()) {
+            const w = bChess.in_checkmate() ? 'black' : 'draw';
+            await finishGameWithResult({ ...fg, moves: bMoves }, w, bChess.in_checkmate() ? 'Мат' : 'Ничья');
+          }
+        }, thinkMs);
+      }
+    }
+    window.handlePieceDragStart = function(ev, sq) {
+      const g = state.activeGame;
+      if (g) {
+        const chess = new Chess(g.fen);
+        const amWhite = g.whiteUid === state.currentUser?.uid;
+        const myColor = amWhite ? 'w' : 'b';
+        const piece = chess.get(sq);
+        if (!piece || piece.color !== myColor || chess.turn() !== myColor || g.status !== 'active') {
+          ev.preventDefault();
+          return;
+        }
+        state.dragFromSquare = sq;
+        state.selectedSquare = sq;
+        state.legalTargets = chess.moves({ square: sq, verbose: true }).map(m => m.to);
+      }
+      if (ev.dataTransfer) {
+        ev.dataTransfer.setData('text/plain', sq);
+        ev.dataTransfer.effectAllowed = 'move';
+      }
+      requestAnimationFrame(() => {
+        const el = document.querySelector(`[data-piece-sq="${sq}"]`);
+        if (el) el.classList.add('dragging-origin');
+      });
+    };
+
+    window.handlePieceDragEnd = function(sq) {
+      state.dragFromSquare = null;
+      const el = document.querySelector(`[data-piece-sq="${sq}"]`);
+      if (el) el.classList.remove('dragging-origin');
+    };
+
+    window.handleSquareDrop = function(ev, targetSq) {
+      ev.preventDefault();
+      const fromSq = state.dragFromSquare || ev.dataTransfer?.getData('text/plain');
+      state.dragFromSquare = null;
+      document.querySelectorAll('.dragging-origin').forEach(el => el.classList.remove('dragging-origin'));
+      if (fromSq && fromSq !== targetSq) {
+        executePlayerMove(fromSq, targetSq);
+      } else {
+        state.selectedSquare = null;
+        state.legalTargets = [];
+        renderApp();
+      }
+    };
+
+    window.resignActiveGame = async function() {
+      const g = state.activeGame;
+      if (!g || g.status !== 'active') return;
+      const amWhite = g.whiteUid === state.currentUser?.uid;
+      await finishGameWithResult(g, amWhite ? 'black' : 'white', 'Сдача');
+    };
+
+    window.rematchCurrentOpponent = async function() {
+      const g = state.activeGame;
+      if (!g || !state.currentUser) return;
+      state.showGameSummaryModal = false;
+      if (g.mode === 'bot') {
+        await window.startBotGame(g.botId || state.selectedBotId || 'larry');
+        return;
+      }
+      const oppUid = g.whiteUid === state.currentUser.uid ? g.blackUid : g.whiteUid;
+      const oppUser = state.usersMap[oppUid];
+      if (!oppUser || !isUserOnline(oppUser)) {
+        showToast('Противник сейчас не в сети', 'error');
+        return;
+      }
+      const rmRef = push(ref(rtdb, 'bc_rematches'));
+      await set(rmRef, {
+        id: rmRef.key,
+        fromUid: state.currentUser.uid,
+        fromNick: state.currentUser.nick,
+        toUid: oppUid,
+        timeControl: g.timeControl || 10,
+        rated: Boolean(g.rated),
+        status: 'pending',
+        createdAt: Date.now()
+      });
+      showToast(`Запрос на реванш отправлен игроку ${oppUser.nick}!`);
+    };
+
+    window.acceptRematch = async function(rmId) {
+      const snap = await get(ref(rtdb, `bc_rematches/${rmId}`));
+      if (!snap.exists()) return;
+      const rm = snap.val();
+      await remove(ref(rtdb, `bc_rematches/${rmId}`));
+      const whiteIsSender = Math.random() < 0.5;
+      await createMultiplayerGame(
+        whiteIsSender ? rm.fromUid : rm.toUid,
+        whiteIsSender ? rm.toUid : rm.fromUid,
+        rm.timeControl || 10,
+        Boolean(rm.rated)
+      );
+    };
+
+    window.declineRematch = async function(rmId) {
+      await remove(ref(rtdb, `bc_rematches/${rmId}`));
+    };
+
+    window.stepReplayMove = function(action) {
+      const g = state.activeGame;
+      if (!g) return;
+      const moves = Array.isArray(g.moves) ? g.moves : [];
+      if (moves.length === 0) return;
+      const maxIdx = moves.length - 1;
+      let cur = state.replayMoveIndex === null ? maxIdx : state.replayMoveIndex;
+      if (action === 'first') cur = -1;
+      else if (action === 'prev') cur = Math.max(-1, cur - 1);
+      else if (action === 'next') cur = Math.min(maxIdx, cur + 1);
+      else if (action === 'last') cur = maxIdx;
+      state.replayMoveIndex = cur === maxIdx ? null : cur;
+      renderApp();
+    };
+
+    window.addEventListener('keydown', (e) => {
+      if (document.activeElement && ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
+      if (state.activeGame && state.path.startsWith('/game/')) {
+        if (e.key === 'ArrowLeft') { e.preventDefault(); window.stepReplayMove('prev'); }
+        else if (e.key === 'ArrowRight') { e.preventDefault(); window.stepReplayMove('next'); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); window.stepReplayMove('first'); }
+        else if (e.key === 'ArrowDown') { e.preventDefault(); window.stepReplayMove('last'); }
+      }
+    });
+
+    // =========================================================================
+    // КУРСЫ ОТ ТРЕНЕРА
+    // =========================================================================
+    window.selectLesson = function(lessonId) {
+      const lesson = LESSONS.find(l => l.id === Number(lessonId)) || LESSONS[0];
+      state.selectedLessonId = lesson.id;
+      state.lessonFen = lesson.fen;
+      state.lessonStatus = 'neutral';
+      state.lessonMessage = lesson.hint;
+      state.selectedSquare = null;
+      state.legalTargets = [];
+      renderApp();
+    };
+
+    window.handleLessonSquareClick = function(sq) {
+      const lesson = LESSONS.find(l => l.id === state.selectedLessonId) || LESSONS[0];
+      const chess = new Chess(state.lessonFen);
+      if (state.selectedSquare) {
+        const move = chess.move({ from: state.selectedSquare, to: sq, promotion: 'q' });
+        if (move) {
+          const uci = move.from + move.to;
+          if (lesson.expected.includes(uci)) {
+            state.lessonFen = chess.fen();
+            state.lessonStatus = 'ok';
+            state.lessonMessage = 'Отлично! Правильный ход выполнен.';
+          } else {
+            state.lessonStatus = 'error';
+            state.lessonMessage = `Ошибка! Ход ${move.san} не подходит. Попробуйте снова: ${lesson.hint}`;
+          }
+          state.selectedSquare = null;
+          state.legalTargets = [];
+          renderApp();
+          return;
+        }
+      }
+      const p = chess.get(sq);
+      if (p && p.color === chess.turn()) {
+        state.selectedSquare = sq;
+        state.legalTargets = chess.moves({ square: sq, verbose: true }).map(m => m.to);
+      } else {
+        state.selectedSquare = null;
+        state.legalTargets = [];
+      }
+      renderApp();
+    };
+
+    // =========================================================================
+    // НАСТРОЙКИ ПОЛЬЗОВАТЕЛЯ
+    // =========================================================================
+    window.saveUserSettings = async function(event) {
+      if (event) event.preventDefault();
+      if (!state.currentUser) return;
+      const newNick = (document.getElementById('settings-nick')?.value || '').trim().replace(/^@+/, '');
+      const boardStyle = document.getElementById('settings-board-style')?.value || 'green';
+      const coachId = document.getElementById('settings-coach-id')?.value || state.currentUser.coachId || 'matti';
+      const publicArchive = Boolean(document.getElementById('settings-public-archive')?.checked);
+
+      if (!isCurrentUserAdmin() && !/^[a-zA-Zа-яА-ЯёЁ0-9_]{3,10}$/.test(newNick)) {
+        showToast('Ник должен содержать от 3 до 10 символов', 'error');
+        return;
+      }
+
+      const taken = Object.values(state.usersMap).some(
+        u => u && u.uid !== state.currentUser.uid && normalizeNick(u.nick) === normalizeNick(newNick)
+      );
+      if (taken) {
+        showToast('Этот никнейм уже занят другим игроком', 'error');
+        return;
+      }
+
+      const patch = {
+        nick: newNick,
+        nickLower: normalizeNick(newNick),
+        boardStyle,
+        coachId,
+        publicArchive
+      };
+      await update(ref(rtdb, `bc_users/${state.currentUser.uid}`), patch);
+      state.currentUser = { ...state.currentUser, ...patch };
+      saveLocalSession(state.currentUser);
+      showToast('Настройки сохранены!');
+      renderApp();
+    };
+
+    // =========================================================================
+    // РЕНДЕР ШАХМАТНОЙ ДОСКИ
+    // =========================================================================
+    function renderChessBoard({ fen, flipped = false, lastMove = null, onClickFnName = 'handleSquareClick', draggable = true }) {
+      const chess = new Chess(fen);
+      const board = chess.board();
+      const boardStyle = state.currentUser?.boardStyle || 'green';
+      const lightColor = boardStyle === 'wood' ? '#f0d9b5' : '#ebecd0';
+      const darkColor = boardStyle === 'wood' ? '#b58863' : '#739552';
+
+      const rows = flipped ? [7, 6, 5, 4, 3, 2, 1, 0] : [0, 1, 2, 3, 4, 5, 6, 7];
+      const cols = flipped ? [7, 6, 5, 4, 3, 2, 1, 0] : [0, 1, 2, 3, 4, 5, 6, 7];
+      const files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+
+      let html = `<div class="board-grid border border-grayBorder">`;
+      for (const r of rows) {
+        for (const c of cols) {
+          const sqName = `${files[c]}${8 - r}`;
+          const isLight = (r + c) % 2 === 0;
+          const isLastFrom = lastMove?.from === sqName;
+          const isLastTo = lastMove?.to === sqName;
+          const isSelected = state.selectedSquare === sqName;
+          const isTarget = state.legalTargets.includes(sqName);
+          const piece = board[r][c];
+
+          let bg = isLight ? lightColor : darkColor;
+          if (isSelected || isLastFrom || isLastTo) {
+            bg = isLight ? '#f5f682' : '#b9ca43';
+          }
+
+          const pieceKey = piece ? `${piece.color}${piece.type.toUpperCase()}` : null;
+          html += `
+            <div onclick="window.${onClickFnName}('${sqName}')"
+                 ondragover="event.preventDefault()"
+                 ondrop="window.handleSquareDrop(event, '${sqName}')"
+                 style="background-color:${bg}"
+                 class="sq-cell">
+              ${pieceKey ? `<div data-piece-sq="${sqName}" draggable="${draggable}" ondragstart="window.handlePieceDragStart(event, '${sqName}')" ondragend="window.handlePieceDragEnd('${sqName}')" class="w-full h-full flex items-center justify-center">${PIECE_SVGS[pieceKey]}</div>` : ''}
+              ${isTarget && !piece ? `<div class="move-dot"></div>` : ''}
+              ${isTarget && piece ? `<div class="capture-ring"></div>` : ''}
+            </div>
+          `;
+        }
+      }
+      html += `</div>`;
+      return html;
+    }
+
+    // =========================================================================
+    // ВЕРХНЯЯ ПАНЕЛЬ НАВИГАЦИИ
+    // =========================================================================
+    function renderTopBar() {
+      const u = state.currentUser;
+      const p = state.path;
+      const q = normalizeNick(state.searchPopoverQuery);
+      const searchResults = Object.values(state.usersMap)
+        .filter(item => item && item.nick && (!q || normalizeNick(item.nick).includes(q)))
+        .slice(0, 8);
+
+      return `
+        <header class="sticky top-0 z-40 bg-grayNav border-b border-grayBorder px-4 h-14 flex items-center justify-between gap-3">
+          <div class="flex items-center gap-2 sm:gap-4">
+            <button type="button" onclick="window.navigate('/')"
+                    class="flex items-center gap-2 font-black text-lg tracking-tight text-white hover:text-tealBright cursor-pointer">
+              <span class="w-8 h-8 rounded-lg bg-tealAccent/20 border border-tealAccent/40 flex items-center justify-center text-tealBright">♞</span>
+              <span>Burmal<span class="text-tealAccent">Chess</span></span>
+            </button>
+
+            ${u ? `
+              <nav class="flex items-center gap-1 sm:gap-2">
+                <button type="button" onclick="window.navigate('/play')"
+                        class="px-3 py-1.5 rounded-xl text-xs font-extrabold cursor-pointer flex items-center gap-1.5 ${
+                          p.startsWith('/play') ? 'bg-tealAccent text-black' : 'bg-grayCard hover:bg-grayHover text-gray-200'
+                        }">
+                  <span>♟️</span><span>Играть</span>
+                </button>
+                <button type="button" onclick="window.navigate('/courses')"
+                        class="px-3 py-1.5 rounded-xl text-xs font-extrabold cursor-pointer flex items-center gap-1.5 ${
+                          p.startsWith('/courses') ? 'bg-tealAccent text-black' : 'bg-grayCard hover:bg-grayHover text-gray-200'
+                        }">
+                  <span>🎓</span><span>Курсы</span>
+                </button>
+                <button type="button" onclick="window.navigate('/bots')"
+                        class="px-3 py-1.5 rounded-xl text-xs font-extrabold cursor-pointer flex items-center gap-1.5 ${
+                          p.startsWith('/bots') ? 'bg-tealAccent text-black' : 'bg-grayCard hover:bg-grayHover text-gray-200'
+                        }">
+                  <span>🤖</span><span>Боты</span>
+                </button>
+              </nav>
+            ` : ''}
+          </div>
+
+          ${u ? `
+            <div class="relative flex items-center gap-2">
+              <button type="button" onclick="window.navigate('/@${escapeJsAttr(u.nick)}')"
+                      class="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-grayCard hover:bg-grayHover text-xs font-bold text-white cursor-pointer">
+                ${renderTitleBadge(u)}
+                <span>${escapeHtml(u.nick)}</span>
+              </button>
+
+              <button type="button" onclick="window.toggleSearchPopover()"
+                      title="Поиск игроков"
+                      class="w-9 h-9 rounded-xl bg-grayCard hover:bg-grayHover border border-grayBorder flex items-center justify-center text-sm cursor-pointer">
+                🔍
+              </button>
+
+              <button type="button" onclick="window.navigate('/settings')"
+                      title="Настройки"
+                      class="w-9 h-9 rounded-xl ${p.startsWith('/settings') ? 'bg-tealAccent text-black' : 'bg-grayCard hover:bg-grayHover text-white'} border border-grayBorder flex items-center justify-center text-sm cursor-pointer">
+                ⚙️
+              </button>
+
+              ${state.searchPopoverOpen ? `
+                <div class="absolute right-0 top-12 w-80 rounded-2xl bg-grayNav border border-grayBorder p-3.5 shadow-2xl space-y-2.5 z-50">
+                  <div class="flex items-center justify-between">
+                    <span class="text-xs font-extrabold text-white">Поиск игроков</span>
+                    <button type="button" onclick="window.toggleSearchPopover(false)" class="text-xs text-gray-400 hover:text-white cursor-pointer">✕</button>
+                  </div>
+                  <input id="top-search-popover-input" type="text" value="${escapeHtml(state.searchPopoverQuery)}"
+                         oninput="window.setSearchPopoverQuery(this.value)"
+                         placeholder="Введите никнейм..."
+                         class="w-full bg-grayBase border border-grayBorder rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-tealAccent" />
+                  <div class="max-h-60 overflow-y-auto space-y-1">
+                    ${searchResults.map(item => {
+                      const online = isUserOnline(item);
+                      const isFriend = Boolean(u.friends && u.friends[item.uid]);
+                      return `
+                        <div class="flex items-center justify-between gap-2 p-2 rounded-xl bg-grayBase border border-grayBorder">
+                          <button type="button" onclick="window.navigate('/@${escapeJsAttr(item.nick)}')"
+                                  class="flex items-center gap-2 text-left text-xs font-bold text-white hover:text-tealBright cursor-pointer truncate">
+                            <span class="w-2.5 h-2.5 rounded-full shrink-0 ${online ? 'bg-emerald-400' : 'bg-gray-600'}"></span>
+                            ${renderTitleBadge(item)}
+                            <span class="truncate">${escapeHtml(item.nick)}</span>
+                          </button>
+                          ${item.uid !== u.uid ? (
+                            isFriend
+                              ? `<button type="button" onclick="window.removeFriendByUid('${escapeJsAttr(item.uid)}')" class="px-2 py-1 rounded-lg bg-red-950 text-red-300 text-[10px] font-bold cursor-pointer">Удалить</button>`
+                              : `<button type="button" onclick="window.addFriendByUid('${escapeJsAttr(item.uid)}')" class="px-2 py-1 rounded-lg bg-tealAccent text-black text-[10px] font-extrabold cursor-pointer">+ Друг</button>`
+                          ) : ''}
+                        </div>
+                      `;
+                    }).join('')}
+                  </div>
+                </div>
+              ` : ''}
+            </div>
+          ` : ''}
+        </header>
+      `;
+    }
+
+    // =========================================================================
+    // ЭКРАНЫ: ВХОД, ОНБОРДИНГ, ГЛАВНАЯ, ЛОББИ, ПАРТИЯ, КУРСЫ, БОТЫ, ПРОФИЛЬ, НАСТРОЙКИ
+    // =========================================================================
+    function renderAuthScreen() {
+      const isRegister = state.authTab === 'register';
+      return `
+        <div class="max-w-md mx-auto mt-10 rounded-2xl bg-grayNav border border-grayBorder p-6 shadow-2xl">
+          <div class="flex items-center justify-center gap-2 mb-5">
+            <span class="w-10 h-10 rounded-xl bg-tealAccent/20 border border-tealAccent/40 flex items-center justify-center text-tealBright font-extrabold text-2xl">♞</span>
+            <h1 class="text-2xl font-black text-white">Burmal<span class="text-tealAccent">Chess</span></h1>
+          </div>
+
+          <div class="grid grid-cols-2 gap-1.5 bg-grayBase p-1 rounded-xl border border-grayBorder mb-5">
+            <button type="button" onclick="window.setAuthTab('login')"
+                    class="py-2 rounded-lg text-xs font-extrabold cursor-pointer ${!isRegister ? 'bg-tealAccent text-black' : 'text-gray-300 hover:text-white'}">
+              Вход (Log In)
+            </button>
+            <button type="button" onclick="window.setAuthTab('register')"
+                    class="py-2 rounded-lg text-xs font-extrabold cursor-pointer ${isRegister ? 'bg-tealAccent text-black' : 'text-gray-300 hover:text-white'}">
+              Регистрация
+            </button>
+          </div>
+
+          ${isRegister ? `
+            <div class="space-y-4 text-center">
+              <p class="text-xs text-gray-300 leading-relaxed">Регистрация нового аккаунта доступна только через Google. После входа вы зададите уникальный никнейм и выберете тренера.</p>
+              <button type="button" onclick="window.handleGoogleSignIn()"
+                      class="w-full py-3 rounded-xl bg-white hover:bg-gray-100 text-black font-extrabold text-sm flex items-center justify-center gap-2.5 shadow-lg cursor-pointer">
+                <span class="font-black text-blue-600">G</span>
+                <span>Зарегистрироваться через Google</span>
+              </button>
+            </div>
+          ` : `
+            <div class="space-y-4">
+              <form onsubmit="window.handleCredentialsLogin(event)" class="space-y-3">
+                <div>
+                  <label class="block text-xs font-semibold text-gray-300 mb-1">Никнейм или почта</label>
+                  <input id="login-identifier" type="text" required placeholder="Введите ник или email"
+                         class="w-full bg-grayBase border border-grayBorder rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-tealAccent" />
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-gray-300 mb-1">Пароль</label>
+                  <input id="login-password" type="password" required placeholder="••••••••"
+                         class="w-full bg-grayBase border border-grayBorder rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-tealAccent" />
+                </div>
+                <button type="submit"
+                        class="w-full py-2.5 rounded-xl bg-tealAccent hover:bg-tealBright text-black font-extrabold text-sm cursor-pointer">
+                  Войти
+                </button>
+              </form>
+
+              <div class="relative flex items-center py-1">
+                <div class="flex-grow border-t border-grayBorder"></div>
+                <span class="shrink mx-3 text-[11px] text-gray-400">или</span>
+                <div class="flex-grow border-t border-grayBorder"></div>
+              </div>
+
+              <button type="button" onclick="window.handleGoogleSignIn()"
+                      class="w-full py-2.5 rounded-xl bg-white hover:bg-gray-100 text-black font-extrabold text-sm flex items-center justify-center gap-2 cursor-pointer">
+                <span class="font-black text-blue-600">G</span>
+                <span>Войти через Google</span>
+              </button>
+            </div>
+          `}
+        </div>
+      `;
+    }
+
+    function renderOnboardingScreen() {
+      if (state.onboardingStep === 'nick') {
+        return `
+          <div class="max-w-md mx-auto mt-10 rounded-2xl bg-grayNav border border-grayBorder p-6 shadow-2xl space-y-4">
+            <h2 class="text-xl font-extrabold text-white text-center">Придумайте ник и пароль</h2>
+            <p class="text-xs text-gray-400 text-center">От 3 до 10 символов. Ник не должен повторяться.</p>
+            <form onsubmit="window.submitOnboardingNick(event)" class="space-y-3">
+              <input id="onboard-nick" type="text" minlength="3" maxlength="10" required placeholder="Ваш никнейм (3-10 букв)"
+                     class="w-full bg-grayBase border border-grayBorder rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-tealAccent" />
+              <input id="onboard-pass" type="password" minlength="4" required placeholder="Придумайте пароль"
+                     class="w-full bg-grayBase border border-grayBorder rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-tealAccent" />
+              <button type="submit" class="w-full py-3 rounded-xl bg-tealAccent hover:bg-tealBright text-black font-extrabold text-sm cursor-pointer">
+                Продолжить
+              </button>
+            </form>
+          </div>
+        `;
+      }
+
+      const coach = COACHES[state.coachCarouselIdx % COACHES.length];
+      return `
+        <div class="max-w-md mx-auto mt-10 rounded-2xl bg-grayNav border border-grayBorder p-6 shadow-2xl text-center space-y-5">
+          <h2 class="text-xl font-extrabold text-white">Выберите тренера</h2>
+          <div class="flex items-center justify-between gap-4 bg-grayBase border border-grayBorder rounded-2xl p-5">
+            <button type="button" onclick="window.stepCoachCarousel(-1)"
+                    class="w-10 h-10 rounded-xl bg-grayCard hover:bg-grayHover text-white font-black text-lg cursor-pointer">◀</button>
+            <div class="flex-1">
+              ${coach.svg}
+              <div class="text-lg font-extrabold text-white mt-3">${escapeHtml(coach.name)}</div>
+            </div>
+            <button type="button" onclick="window.stepCoachCarousel(1)"
+                    class="w-10 h-10 rounded-xl bg-grayCard hover:bg-grayHover text-white font-black text-lg cursor-pointer">▶</button>
+          </div>
+          <button type="button" onclick="window.selectOnboardingCoach('${coach.id}')"
+                  class="w-full py-3 rounded-xl bg-tealAccent hover:bg-tealBright text-black font-extrabold text-sm cursor-pointer">
+            Выбрать
+          </button>
+        </div>
+      `;
+    }
+
+    function renderHomeScreen() {
+      const u = state.currentUser;
+      const tc = state.leaderboardTime;
+      const topPlayers = Object.values(state.usersMap)
+        .filter(item => item && item.nick)
+        .sort((a, b) => getUserRatingForTime(b, tc) - getUserRatingForTime(a, tc))
+        .slice(0, 100);
+
+      return `
+        <div class="max-w-5xl mx-auto mt-4 space-y-6">
+          <div class="rounded-2xl bg-grayNav border border-grayBorder p-6 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h1 class="text-2xl sm:text-3xl font-black text-white flex items-center gap-2 flex-wrap">
+                <span>Приветствую,</span>
+                ${renderTitleBadge(u)}
+                <span class="text-tealBright">${escapeHtml(u.nick)}</span>
+              </h1>
+              <p class="text-xs text-gray-400 mt-1">
+                10 мин: <b class="text-white">${getUserRatingForTime(u, 10)}</b> •
+                3 мин: <b class="text-white">${getUserRatingForTime(u, 3)}</b> •
+                1 мин: <b class="text-white">${getUserRatingForTime(u, 1)}</b>
+              </p>
+            </div>
+            <button type="button" onclick="window.navigate('/@${escapeJsAttr(u.nick)}')"
+                    class="px-4 py-2 rounded-xl bg-grayCard hover:bg-grayHover border border-grayBorder text-xs font-extrabold text-white cursor-pointer self-start sm:self-auto">
+              Мой профиль
+            </button>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <button type="button" onclick="window.navigate('/play')"
+                    class="rounded-2xl bg-grayNav hover:bg-grayCard border border-grayBorder hover:border-tealAccent p-6 text-left transition-all cursor-pointer group">
+              <div class="text-3xl mb-3">♟️</div>
+              <div class="text-lg font-extrabold text-white group-hover:text-tealBright">Играть</div>
+              <div class="text-xs text-gray-400 mt-1">Онлайн матч 10, 3 или 1 мин, либо вызов другу</div>
+            </button>
+
+            <button type="button" onclick="window.navigate('/courses')"
+                    class="rounded-2xl bg-grayNav hover:bg-grayCard border border-grayBorder hover:border-tealAccent p-6 text-left transition-all cursor-pointer group">
+              <div class="text-3xl mb-3">🎓</div>
+              <div class="text-lg font-extrabold text-white group-hover:text-tealBright">Учёба</div>
+              <div class="text-xs text-gray-400 mt-1">100 интерактивных уроков от вашего тренера</div>
+            </button>
+
+            <button type="button" onclick="window.navigate('/bots')"
+                    class="rounded-2xl bg-grayNav hover:bg-grayCard border border-grayBorder hover:border-tealAccent p-6 text-left transition-all cursor-pointer group">
+              <div class="text-3xl mb-3">🤖</div>
+              <div class="text-lg font-extrabold text-white group-hover:text-tealBright">Боты</div>
+              <div class="text-xs text-gray-400 mt-1">Ларри, Гоблин, Mittens и Final Boss Борис</div>
+            </button>
+
+            <button type="button" onclick="window.navigate('/settings')"
+                    class="rounded-2xl bg-grayNav hover:bg-grayCard border border-grayBorder hover:border-tealAccent p-6 text-left transition-all cursor-pointer group">
+              <div class="text-3xl mb-3">⚙️</div>
+              <div class="text-lg font-extrabold text-white group-hover:text-tealBright">Настройки</div>
+              <div class="text-xs text-gray-400 mt-1">Стиль доски, никнейм, тренер и приватность</div>
+            </button>
+          </div>
+
+          <div class="rounded-2xl bg-grayNav border border-grayBorder p-5 shadow-xl space-y-4">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <h2 class="text-lg font-extrabold text-white">🏆 Топ рейтинг (1–100)</h2>
+              <div class="flex items-center gap-1.5 bg-grayBase p-1 rounded-xl border border-grayBorder">
+                ${[10, 3, 1].map(m => `
+                  <button type="button" onclick="window.setLeaderboardTime(${m})"
+                          class="px-3.5 py-1.5 rounded-lg text-xs font-extrabold cursor-pointer ${
+                            tc === m ? 'bg-tealAccent text-black' : 'text-gray-300 hover:text-white'
+                          }">
+                    ${m} мин
+                  </button>
+                `).join('')}
+              </div>
+            </div>
+
+            <div class="divide-y divide-grayBorder max-h-96 overflow-y-auto">
+              ${topPlayers.length === 0 ? `<p class="text-xs text-gray-400 py-4 text-center">Пока нет игроков</p>` : topPlayers.map((pl, idx) => `
+                <div class="py-2.5 px-2 flex items-center justify-between gap-3 hover:bg-grayBase/60 rounded-lg">
+                  <div class="flex items-center gap-3">
+                    <span class="w-7 text-xs font-black ${idx === 0 ? 'text-amber-400' : idx === 1 ? 'text-gray-300' : idx === 2 ? 'text-amber-600' : 'text-gray-500'}">#${idx + 1}</span>
+                    <span class="w-2 h-2 rounded-full ${isUserOnline(pl) ? 'bg-emerald-400' : 'bg-gray-600'}"></span>
+                    <button type="button" onclick="window.navigate('/@${escapeJsAttr(pl.nick)}')"
+                            class="text-sm font-bold text-white hover:text-tealBright cursor-pointer flex items-center">
+                      ${renderTitleBadge(pl)}
+                      <span>${escapeHtml(pl.nick)}</span>
+                    </button>
+                  </div>
+                  <span class="text-xs font-black text-tealAccent">${getUserRatingForTime(pl, tc)} Эло</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderPlayLobbyScreen() {
+      if (state.friendChallengeMode) {
+        const q = normalizeNick(state.friendChallengeSearch);
+        const candidates = Object.values(state.usersMap).filter(u => {
+          if (!u || !u.nick || u.uid === state.currentUser?.uid) return false;
+          if (!q) return isUserOnline(u);
+          return normalizeNick(u.nick).includes(q);
+        }).slice(0, 12);
+
+        return `
+          <div class="max-w-lg mx-auto mt-6 rounded-2xl bg-grayNav border border-grayBorder p-6 shadow-2xl space-y-4">
+            <div class="flex items-center justify-between">
+              <button type="button" onclick="window.setFriendChallengeMode(false)"
+                      class="px-3.5 py-1.5 rounded-xl bg-grayCard hover:bg-grayHover text-xs font-extrabold text-white cursor-pointer">
+                ← Назад
+              </button>
+              <h2 class="text-base font-extrabold text-white">Играть с другом</h2>
+              <div class="w-16"></div>
+            </div>
+
+            <div>
+              <label class="block text-xs text-gray-400 mb-1">Поиск игрока по нику (зелёный индикатор = в сети)</label>
+              <input id="friend-challenge-search-input" type="text" value="${escapeHtml(state.friendChallengeSearch)}"
+                     oninput="window.setFriendChallengeSearch(this.value)"
+                     placeholder="Введите никнейм..."
+                     class="w-full bg-grayBase border border-grayBorder rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-tealAccent" />
+            </div>
+
+            <div class="max-h-56 overflow-y-auto space-y-1.5">
+              ${candidates.length === 0 ? `<p class="text-xs text-gray-400 text-center py-4">Подходящие игроки в сети не найдены</p>` : candidates.map(u => {
+                const online = isUserOnline(u);
+                const selected = state.friendChallengeTarget?.uid === u.uid;
+                return `
+                  <button type="button" onclick="window.selectFriendChallengeTarget('${escapeJsAttr(u.uid)}')"
+                          class="w-full flex items-center justify-between p-2.5 rounded-xl border text-left cursor-pointer ${
+                            selected ? 'bg-tealAccent/15 border-tealAccent' : 'bg-grayBase border-grayBorder hover:border-gray-500'
+                          }">
+                    <div class="flex items-center gap-2">
+                      <span class="w-2.5 h-2.5 rounded-full ${online ? 'bg-emerald-400' : 'bg-gray-600'}"></span>
+                      ${renderTitleBadge(u)}
+                      <span class="text-sm font-bold text-white">${escapeHtml(u.nick)}</span>
+                    </div>
+                    <span class="text-xs font-bold text-tealAccent">${getUserRatingForTime(u, state.selectedTimeControl)} Эло</span>
+                  </button>
+                `;
+              }).join('')}
+            </div>
+
+            <div class="grid grid-cols-3 gap-2">
+              ${[10, 3, 1].map(m => `
+                <button type="button" onclick="window.setSelectedTimeControl(${m})"
+                        class="py-2 rounded-xl text-xs font-extrabold border cursor-pointer ${
+                          state.selectedTimeControl === m ? 'bg-tealAccent text-black border-tealAccent' : 'bg-grayBase text-gray-300 border-grayBorder'
+                        }">
+                  ${m} мин
+                </button>
+              `).join('')}
+            </div>
+
+            <label class="flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-grayBase border border-grayBorder cursor-pointer">
+              <span class="text-xs font-bold text-white">Игра на рейтинг (Эло)</span>
+              <input type="checkbox" ${state.selectedRated ? 'checked' : ''}
+                     onchange="window.setSelectedRated(this.checked)"
+                     class="accent-teal-400 w-4 h-4" />
+            </label>
+
+            <button type="button" onclick="window.sendFriendChallenge()"
+                    class="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-sm shadow-lg cursor-pointer">
+              Отправить вызов
+            </button>
+          </div>
+        `;
+      }
+
+      return `
+        <div class="max-w-md mx-auto mt-8 rounded-2xl bg-grayNav border border-grayBorder p-6 shadow-2xl space-y-5">
+          <div class="text-center">
+            <h1 class="text-xl font-extrabold text-white">Новая партия</h1>
+            <p class="text-xs text-gray-400 mt-1">Выберите контроль времени и режим игры</p>
+          </div>
+
+          <div class="grid grid-cols-3 gap-2.5">
+            ${[10, 3, 1].map(m => `
+              <button type="button" onclick="window.setSelectedTimeControl(${m})"
+                      class="py-3 rounded-xl text-sm font-extrabold border cursor-pointer transition-colors ${
+                        state.selectedTimeControl === m
+                          ? 'bg-tealAccent/20 border-tealAccent text-tealBright'
+                          : 'bg-grayBase border-grayBorder text-gray-300 hover:text-white'
+                      }">
+                ${m} мин
+              </button>
+            `).join('')}
+          </div>
+
+          <label class="flex items-center justify-between px-4 py-3 rounded-xl bg-grayBase border border-grayBorder cursor-pointer">
+            <span class="text-xs font-bold text-white">На рейтинг</span>
+            <input type="checkbox" ${state.selectedRated ? 'checked' : ''}
+                   onchange="window.setSelectedRated(this.checked)"
+                   class="accent-teal-400 w-4 h-4" />
+          </label>
+
+          <div class="space-y-2.5">
+            <button type="button" onclick="window.startMatchmaking()"
+                    class="w-full py-3.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-sm shadow-lg cursor-pointer">
+              ${state.isSearchingMatch ? 'Поиск соперника... (Нажмите для отмены)' : 'Начать партию'}
+            </button>
+            <button type="button" onclick="window.setFriendChallengeMode(true)"
+                    class="w-full py-3 rounded-xl bg-grayCard hover:bg-grayHover border border-grayBorder text-white font-bold text-sm cursor-pointer">
+              Играть с другом
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderActiveGameScreen() {
+      const g = state.activeGame;
+      if (!g) {
+        return `<div class="max-w-md mx-auto mt-10 text-center text-gray-400 text-sm">Партия не найдена</div>`;
+      }
+
+      const amWhite = g.whiteUid === state.currentUser?.uid;
+      const whiteUser = state.usersMap[g.whiteUid] || { uid: g.whiteUid, nick: 'Белые', elo10: 500, elo3: 500, elo1: 500 };
+      const blackUser = g.mode === 'bot'
+        ? { uid: g.blackUid, nick: BOTS.find(b => b.id === g.botId)?.name || 'Бот', isBot: true, elo: BOTS.find(b => b.id === g.botId)?.elo || 500 }
+        : (state.usersMap[g.blackUid] || { uid: g.blackUid, nick: 'Чёрные', elo10: 500, elo3: 500, elo1: 500 });
+
+      const topUser = amWhite ? blackUser : whiteUser;
+      const bottomUser = amWhite ? whiteUser : blackUser;
+      const topElo = topUser.isBot ? topUser.elo : getUserRatingForTime(topUser, g.timeControl || 10);
+      const bottomElo = bottomUser.isBot ? bottomUser.elo : getUserRatingForTime(bottomUser, g.timeControl || 10);
+
+      const moves = Array.isArray(g.moves) ? g.moves : [];
+      let displayFen = g.fen;
+      let displayLastMove = g.lastMove || (moves.length > 0 ? { from: moves[moves.length - 1].from, to: moves[moves.length - 1].to } : null);
+      if (state.replayMoveIndex !== null) {
+        if (state.replayMoveIndex === -1) {
+          displayFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+          displayLastMove = null;
+        } else if (moves[state.replayMoveIndex]) {
+          displayFen = moves[state.replayMoveIndex].fen;
+          displayLastMove = { from: moves[state.replayMoveIndex].from, to: moves[state.replayMoveIndex].to };
+        }
+      }
+
+      const myHasFm = getUserTitlesArray(state.currentUser).includes('FM');
+      const activeTrackId = Number(g.fmPlayer?.trackId || 0);
+      const chatMsgs = g.chat ? Object.values(g.chat).sort((a, b) => a.ts - b.ts) : [];
+      const sum = g.summary;
+
+      return `
+        <div class="max-w-7xl mx-auto mt-2 grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+          <!-- Левая колонка: Плеер FM -->
+          <div class="lg:col-span-3 space-y-3">
+            ${myHasFm ? `
+              <div class="rounded-2xl bg-grayNav border border-tealAccent/50 p-4 shadow-xl space-y-3">
+                <div class="flex items-center justify-between">
+                  <span class="text-xs font-black text-tealBright uppercase">🎵 Плеер FM</span>
+                  <span class="text-[10px] text-gray-400">Слышно обоим</span>
+                </div>
+                <select onchange="window.selectFmTrack(this.value)"
+                        class="w-full bg-grayBase border border-grayBorder rounded-xl px-2.5 py-2 text-xs font-bold text-white focus:outline-none">
+                  ${FM_TRACKS.map(tr => `<option value="${tr.id}" ${activeTrackId === tr.id ? 'selected' : ''}>${escapeHtml(tr.title)}</option>`).join('')}
+                </select>
+                <button type="button" onclick="window.toggleFmPlayerPlay()"
+                        class="w-full py-2 rounded-xl bg-tealAccent text-black text-xs font-extrabold cursor-pointer">
+                  ${g.fmPlayer?.playing ? '⏸ Пауза' : '▶ Включить трек'}
+                </button>
+                <div>
+                  <div class="flex justify-between text-[11px] text-gray-400 mb-1">
+                    <span>Таймкод</span>
+                    <span>${Math.floor((g.fmPlayer?.positionSec || 0) / 60)}:${String((g.fmPlayer?.positionSec || 0) % 60).padStart(2, '0')} / 3:00</span>
+                  </div>
+                  <input type="range" min="0" max="180" value="${Number(g.fmPlayer?.positionSec || 0)}"
+                         onchange="window.seekFmPlayer(this.value)"
+                         class="w-full accent-teal-400 cursor-pointer" />
+                </div>
+              </div>
+            ` : `
+              <div class="hidden lg:block rounded-2xl bg-grayNav border border-grayBorder p-4 text-xs text-gray-400 space-y-1.5">
+                <div class="font-extrabold text-white">Контроль: ${g.timeControl} мин</div>
+                <div>Режим: ${g.rated ? 'Рейтинговая' : 'Товарищеская'}</div>
+                <div>Правило: 30 сек на ход</div>
+              </div>
+            `}
+          </div>
+
+          <!-- Центр: Доска, игроки и кнопки навигации по ходам -->
+          <div class="lg:col-span-6 flex flex-col items-center space-y-2.5">
+            <!-- Верхний игрок (противник) -->
+            <div class="w-full max-w-[560px] flex items-center justify-between bg-grayNav border border-grayBorder px-3.5 py-2 rounded-xl relative">
+              <button type="button" onclick="window.togglePlayerMenuSide('top')"
+                      class="flex items-center gap-2 text-left cursor-pointer hover:text-tealBright">
+                ${renderTitleBadge(topUser)}
+                <span class="text-sm font-extrabold text-white">${escapeHtml(topUser.nick)}</span>
+                <span class="text-xs font-bold text-gray-400">(${topElo})</span>
+                ${g.mode === 'bot' && state.botThinking ? `<span class="text-[11px] font-bold text-tealAccent animate-pulse">думает...</span>` : ''}
+              </button>
+              <div id="clock-top" class="px-3 py-1 rounded-lg bg-grayBase border border-grayBorder font-mono text-sm font-black text-white">
+                ${g.mode === 'bot' ? '∞' : formatMs(amWhite ? g.blackTimeMs : g.whiteTimeMs)}
+              </div>
+
+              ${state.openPlayerMenuSide === 'top' && !topUser.isBot ? `
+                <div class="absolute left-3 top-12 z-30 w-52 rounded-xl bg-grayNav border border-grayBorder p-2 shadow-2xl space-y-1 text-xs">
+                  <button type="button" onclick="window.navigate('/@${escapeJsAttr(topUser.nick)}')" class="w-full text-left px-3 py-1.5 rounded-lg hover:bg-grayHover text-white cursor-pointer">Профиль</button>
+                  <button type="button" onclick="window.addFriendByUid('${escapeJsAttr(topUser.uid)}')" class="w-full text-left px-3 py-1.5 rounded-lg hover:bg-grayHover text-tealBright cursor-pointer">Добавить в друзья</button>
+                  <button type="button" onclick="window.rematchCurrentOpponent()" class="w-full text-left px-3 py-1.5 rounded-lg hover:bg-grayHover text-white cursor-pointer">Играть снова</button>
+                </div>
+              ` : ''}
+            </div>
+
+            ${renderChessBoard({ fen: displayFen, flipped: !amWhite, lastMove: displayLastMove, onClickFnName: 'handleSquareClick', draggable: true })}
+
+            <!-- Нижний игрок (вы) -->
+            <div class="w-full max-w-[560px] flex items-center justify-between bg-grayNav border border-grayBorder px-3.5 py-2 rounded-xl">
+              <div class="flex items-center gap-2">
+                ${renderTitleBadge(bottomUser)}
+                <span class="text-sm font-extrabold text-white">${escapeHtml(bottomUser.nick)}</span>
+                <span class="text-xs font-bold text-tealAccent">(${bottomElo})</span>
+              </div>
+              <div id="clock-bottom" class="px-3 py-1 rounded-lg bg-grayBase border border-grayBorder font-mono text-sm font-black text-tealBright">
+                ${g.mode === 'bot' ? '∞' : formatMs(amWhite ? g.whiteTimeMs : g.blackTimeMs)}
+              </div>
+            </div>
+
+            <!-- Переключатели ходов и сдача -->
+            <div class="w-full max-w-[560px] flex items-center justify-between gap-2 bg-grayNav border border-grayBorder p-2 rounded-xl">
+              <div class="flex items-center gap-1.5">
+                <button type="button" onclick="window.stepReplayMove('first')" class="px-3 py-1.5 rounded-lg bg-grayCard hover:bg-grayHover text-xs font-black cursor-pointer" title="Первый ход">|◀</button>
+                <button type="button" onclick="window.stepReplayMove('prev')" class="px-3 py-1.5 rounded-lg bg-grayCard hover:bg-grayHover text-xs font-black cursor-pointer" title="Предыдущий ход">◀</button>
+                <button type="button" onclick="window.stepReplayMove('next')" class="px-3 py-1.5 rounded-lg bg-grayCard hover:bg-grayHover text-xs font-black cursor-pointer" title="Следующий ход">▶</button>
+                <button type="button" onclick="window.stepReplayMove('last')" class="px-3 py-1.5 rounded-lg bg-grayCard hover:bg-grayHover text-xs font-black cursor-pointer" title="Последний ход">▶|</button>
+              </div>
+              ${g.status === 'active' ? `
+                <button type="button" onclick="window.resignActiveGame()" class="px-3.5 py-1.5 rounded-lg bg-red-950 hover:bg-red-800 text-red-200 text-xs font-extrabold cursor-pointer">
+                  Сдаться
+                </button>
+              ` : `
+                <button type="button" onclick="window.rematchCurrentOpponent()" class="px-3.5 py-1.5 rounded-lg bg-tealAccent text-black text-xs font-extrabold cursor-pointer">
+                  Играть снова
+                </button>
+              `}
+            </div>
+          </div>
+
+          <!-- Правая колонка: Чат партии -->
+          <div class="lg:col-span-3 rounded-2xl bg-grayNav border border-grayBorder p-4 shadow-xl flex flex-col h-[520px]">
+            <h3 class="text-xs font-extrabold uppercase text-gray-300 border-b border-grayBorder pb-2 mb-2">💬 Чат партии</h3>
+            <div class="flex-1 overflow-y-auto space-y-2 pr-1 text-xs">
+              ${chatMsgs.length === 0 ? `<p class="text-gray-500 text-center mt-8">Сообщений пока нет</p>` : chatMsgs.map(m => `
+                <div class="p-2 rounded-xl bg-grayBase border border-grayBorder">
+                  <div class="font-extrabold text-tealBright">${escapeHtml(m.nick)}</div>
+                  <div class="text-gray-100 mt-0.5 break-words">${escapeHtml(m.text)}</div>
+                </div>
+              `).join('')}
+            </div>
+            <form onsubmit="window.sendGameChatMessage(event)" class="mt-2 flex gap-1.5">
+              <input id="game-chat-input" type="text" placeholder="Написать в чат..."
+                     class="flex-1 bg-grayBase border border-grayBorder rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-tealAccent" />
+              <button type="submit" class="px-3 py-2 rounded-xl bg-tealAccent text-black text-xs font-extrabold cursor-pointer">➤</button>
+            </form>
+          </div>
+        </div>
+
+        ${state.showGameSummaryModal && sum ? `
+          <div class="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
+            <div class="max-w-sm w-full rounded-2xl bg-grayNav border border-tealAccent p-6 shadow-2xl space-y-4 text-center relative">
+              <button type="button" onclick="window.closeGameSummaryModal()"
+                      class="absolute right-3.5 top-3.5 text-gray-400 hover:text-white text-sm font-black cursor-pointer">✕</button>
+              <h2 class="text-2xl font-black text-white">
+                ${sum.winner === 'draw' ? 'Ничья!' : ((sum.winner === 'white' && amWhite) || (sum.winner === 'black' && !amWhite) ? 'Вы выиграли!' : 'Вы проиграли')}
+              </h2>
+              <p class="text-xs text-gray-400">${escapeHtml(sum.reason)}</p>
+              <div class="grid grid-cols-3 gap-2 bg-grayBase p-3 rounded-xl border border-grayBorder text-xs">
+                <div><div class="text-cyan-400 font-black text-base">${sum.brilliant}</div><div class="text-gray-400">Бриллиант</div></div>
+                <div><div class="text-emerald-400 font-black text-base">${sum.best}</div><div class="text-gray-400">Лучших</div></div>
+                <div><div class="text-tealAccent font-black text-base">${sum.good}</div><div class="text-gray-400">Хороших</div></div>
+              </div>
+              <div class="text-xs text-gray-300">Время партии: <b>${sum.durationSec} сек.</b></div>
+              <div class="flex gap-2">
+                <button type="button" onclick="window.rematchCurrentOpponent()" class="flex-1 py-2.5 rounded-xl bg-tealAccent text-black text-xs font-extrabold cursor-pointer">Играть снова</button>
+                <button type="button" onclick="window.closeGameSummaryModal()" class="px-4 py-2.5 rounded-xl bg-grayCard text-white text-xs font-bold cursor-pointer">Смотреть доску</button>
+              </div>
+            </div>
+          </div>
+        ` : ''}
+      `;
+    }
+
+    function renderCoursesScreen() {
+      const u = state.currentUser;
+      const coach = COACHES.find(c => c.id === u?.coachId) || COACHES[0];
+      const lesson = LESSONS.find(l => l.id === state.selectedLessonId) || LESSONS[0];
+
+      return `
+        <div class="max-w-6xl mx-auto mt-2 grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+          <div class="lg:col-span-5 rounded-2xl bg-grayNav border border-grayBorder p-5 space-y-4">
+            <div class="flex items-center gap-3.5">
+              <div class="shrink-0">${coach.svg}</div>
+              <div>
+                <div class="text-xs uppercase font-bold text-tealAccent">Ваш тренер</div>
+                <div class="text-xl font-black text-white">${escapeHtml(coach.name)}</div>
+              </div>
+            </div>
+
+            <div class="p-4 rounded-xl border ${
+              state.lessonStatus === 'error'
+                ? 'bg-red-950/50 border-red-500 text-red-200'
+                : state.lessonStatus === 'ok'
+                  ? 'bg-emerald-950/50 border-emerald-500 text-emerald-200'
+                  : 'bg-grayBase border-grayBorder text-gray-100'
+            }">
+              <div class="text-base font-extrabold mb-1">${escapeHtml(lesson.title)}</div>
+              <div class="text-sm leading-relaxed">${escapeHtml(state.lessonMessage)}</div>
+            </div>
+
+            <div>
+              <div class="text-xs font-extrabold text-gray-300 mb-2">Шкала занятий (1 – 100):</div>
+              <div class="grid grid-cols-10 gap-1.5 max-h-60 overflow-y-auto pr-1">
+                ${LESSONS.map(l => `
+                  <button type="button" onclick="window.selectLesson(${l.id})"
+                          class="py-1.5 rounded-lg text-xs font-extrabold cursor-pointer ${
+                            l.id === lesson.id ? 'bg-tealAccent text-black' : 'bg-grayBase hover:bg-grayHover text-gray-300'
+                          }">
+                    ${l.id}
+                  </button>
+                `).join('')}
+              </div>
+            </div>
+          </div>
+
+          <div class="lg:col-span-7 flex flex-col items-center space-y-3">
+            ${renderChessBoard({ fen: state.lessonFen, flipped: false, onClickFnName: 'handleLessonSquareClick', draggable: false })}
+            <button type="button" onclick="window.selectLesson(${lesson.id})"
+                    class="px-4 py-2 rounded-xl bg-grayCard hover:bg-grayHover text-xs font-bold text-white cursor-pointer">
+              Сбросить позицию урока
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderBotsScreen() {
+      const currentBot = BOTS.find(b => b.id === state.selectedBotId) || BOTS[0];
+      return `
+        <div class="max-w-5xl mx-auto mt-2 space-y-5">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl bg-grayNav border border-grayBorder p-5">
+            <div>
+              <h1 class="text-xl font-extrabold text-white">🤖 Игра с ботами</h1>
+              <p class="text-xs text-gray-400 mt-0.5">Игра против ботов идёт без ограничения по времени. Партия сохраняется в архив.</p>
+            </div>
+            <div class="flex items-center gap-3 flex-wrap">
+              <label class="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-grayBase border border-grayBorder cursor-pointer">
+                <span class="text-xs font-bold text-white">Бот думает (задержка)</span>
+                <input type="checkbox" ${state.botThinkEnabled ? 'checked' : ''}
+                       onchange="window.setBotThinkEnabled(this.checked)"
+                       class="accent-teal-400 w-4 h-4" />
+              </label>
+              <span class="px-3 py-2 rounded-xl bg-grayBase border border-grayBorder text-xs font-extrabold text-tealBright">
+                Без таймера (∞)
+              </span>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            ${BOTS.map(bot => {
+              const selected = state.selectedBotId === bot.id;
+              return `
+                <div onclick="window.setSelectedBotId('${bot.id}')"
+                     class="rounded-2xl p-5 border transition-all cursor-pointer flex flex-col justify-between ${
+                       bot.isBoss
+                         ? (selected ? 'bg-red-950/40 border-red-500 shadow-xl' : 'bg-grayNav border-red-500/40 hover:border-red-500')
+                         : (selected ? 'bg-grayCard border-tealAccent shadow-xl' : 'bg-grayNav border-grayBorder hover:border-gray-500')
+                     }">
+                  <div class="text-center">
+                    <span class="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase mb-3 ${
+                      bot.isBoss ? 'bg-red-600 text-white' : 'bg-tealAccent/20 text-tealBright'
+                    }">
+                      ${escapeHtml(bot.badge)}
+                    </span>
+                    ${bot.svg}
+                    <h2 class="text-lg font-extrabold text-white mt-3">${escapeHtml(bot.name)}</h2>
+                    <p class="text-xs font-extrabold ${bot.isBoss ? 'text-red-400' : 'text-tealAccent'} mt-0.5">
+                      ${bot.elo} Эло ${bot.isBoss ? '• Final Boss' : ''}
+                    </p>
+                    <p class="text-xs text-gray-400 mt-2 leading-relaxed">${escapeHtml(bot.desc)}</p>
+                    <button type="button" onclick="event.stopPropagation(); window.startBotGame('${bot.id}');"
+                            class="mt-4 w-full py-2 rounded-xl text-xs font-extrabold cursor-pointer ${
+                              bot.isBoss ? 'bg-red-600 hover:bg-red-500 text-white' : 'bg-tealAccent/20 hover:bg-tealAccent text-tealBright hover:text-black'
+                            }">
+                      Играть с ${escapeHtml(bot.name)}
+                    </button>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+
+          <div class="max-w-md mx-auto">
+            <button type="button" onclick="window.startBotGame('${currentBot.id}')"
+                    class="w-full py-3.5 rounded-xl bg-tealAccent hover:bg-tealBright text-black font-extrabold text-sm shadow-lg cursor-pointer">
+              Начать с выбранным ботом (${escapeHtml(currentBot.name)})
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderProfileScreen(nickParam) {
+      const target = Object.values(state.usersMap).find(
+        u => u && normalizeNick(u.nick) === normalizeNick(nickParam)
+      );
+      if (!target) {
+        return `<div class="max-w-md mx-auto mt-10 rounded-2xl bg-grayNav border border-grayBorder p-6 text-center text-sm text-gray-300">Пользователь @${escapeHtml(nickParam)} не найден</div>`;
+      }
+
+      const isMe = target.uid === state.currentUser?.uid;
+      const isFriend = Boolean(state.currentUser?.friends && state.currentUser.friends[target.uid]);
+      const friendUids = Object.keys(target.friends || {});
+      const archives = state.userArchives[target.uid] ? Object.values(state.userArchives[target.uid]).sort((a, b) => b.createdAt - a.createdAt) : [];
+      const canSeeArchive = isMe || target.publicArchive !== false;
+
+      return `
+        <div class="max-w-4xl mx-auto mt-3 space-y-5">
+          <div class="rounded-2xl bg-grayNav border border-grayBorder p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div class="space-y-1.5">
+              <div class="flex items-center gap-2">
+                <span class="w-3 h-3 rounded-full ${isUserOnline(target) ? 'bg-emerald-400' : 'bg-gray-600'}"></span>
+                ${renderTitleBadge(target)}
+                <h1 class="text-2xl font-black text-white">${escapeHtml(target.nick)}</h1>
+              </div>
+              <div class="flex flex-wrap gap-3 text-xs text-gray-300">
+                <span>10 мин: <b class="text-tealAccent">${getUserRatingForTime(target, 10)}</b></span>
+                <span>3 мин: <b class="text-tealAccent">${getUserRatingForTime(target, 3)}</b></span>
+                <span>1 мин: <b class="text-tealAccent">${getUserRatingForTime(target, 1)}</b></span>
+                <span>Партий: <b class="text-white">${target.gamesPlayed || archives.length}</b></span>
+                <span>Друзей: <b class="text-white">${friendUids.length}</b></span>
+              </div>
+            </div>
+
+            ${!isMe ? (
+              isFriend
+                ? `<button type="button" onclick="window.removeFriendByUid('${escapeJsAttr(target.uid)}')" class="px-4 py-2 rounded-xl bg-red-950 text-red-200 text-xs font-extrabold cursor-pointer">Удалить из друзей</button>`
+                : `<button type="button" onclick="window.addFriendByUid('${escapeJsAttr(target.uid)}')" class="px-4 py-2 rounded-xl bg-tealAccent text-black text-xs font-extrabold cursor-pointer">Добавить в друзья</button>`
+            ) : ''}
+          </div>
+
+          <div class="rounded-2xl bg-grayNav border border-grayBorder p-5 space-y-3">
+            <h2 class="text-base font-extrabold text-white">📜 Архив партий</h2>
+            ${!canSeeArchive ? `<p class="text-xs text-gray-400">Игрок скрыл архив партий.</p>` : (
+              archives.length === 0 ? `<p class="text-xs text-gray-400">Сыгранных партий пока нет.</p>` : `
+                <div class="divide-y divide-grayBorder">
+                  ${archives.map(g => `
+                    <div class="py-2.5 flex items-center justify-between gap-2 text-xs">
+                      <div>
+                        <span class="font-bold text-white">${escapeHtml(g.whiteNick)}</span> vs <span class="font-bold text-white">${escapeHtml(g.blackNick)}</span>
+                        <span class="text-gray-400 ml-2">(${g.timeControl} мин)</span>
+                      </div>
+                      <button type="button" onclick="window.openArchivedGame('${escapeJsAttr(target.uid)}', '${escapeJsAttr(g.gameId)}')"
+                              class="px-3 py-1 rounded-lg bg-grayCard hover:bg-grayHover text-tealBright font-bold cursor-pointer">
+                        Смотреть
+                      </button>
+                    </div>
+                  `).join('')}
+                </div>
+              `
+            )}
+          </div>
+        </div>
+      `;
+    }
+
+    window.openArchivedGame = function(uid, gameId) {
+      const rec = state.userArchives[uid]?.[gameId];
+      if (!rec) return;
+      const moves = Array.isArray(rec.moves) ? rec.moves : [];
+      const lastFen = moves.length > 0 ? moves[moves.length - 1].fen : 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+      state.activeGameId = gameId;
+      state.activeGame = {
+        id: gameId,
+        mode: 'archive',
+        status: 'finished',
+        whiteUid: rec.whiteUid,
+        blackUid: rec.blackUid,
+        timeControl: rec.timeControl,
+        fen: lastFen,
+        moves,
+        whiteTimeMs: 0,
+        blackTimeMs: 0
+      };
+      state.replayMoveIndex = null;
+      window.navigate(`/game/${gameId}`);
+    };
+
+    function renderSettingsScreen() {
+      const u = state.currentUser;
+      const isAdmin = isCurrentUserAdmin();
+
+      const banQ = normalizeNick(state.adminBanSearch);
+      const banSuggestions = banQ
+        ? Object.values(state.usersMap).filter(item => item && item.nick && normalizeNick(item.nick).includes(banQ)).slice(0, 5)
+        : [];
+
+      const titleQ = normalizeNick(state.adminTitleSearch);
+      const titleSuggestions = titleQ
+        ? Object.values(state.usersMap).filter(item => item && item.nick && normalizeNick(item.nick).includes(titleQ)).slice(0, 5)
+        : [];
+
+      const nickQ = normalizeNick(state.adminNickSearch);
+      const nickSuggestions = nickQ
+        ? Object.values(state.usersMap).filter(item => item && item.nick && normalizeNick(item.nick).includes(nickQ)).slice(0, 5)
+        : [];
+
+      const eloQ = normalizeNick(state.adminEloSearch);
+      const eloSuggestions = eloQ
+        ? Object.values(state.usersMap).filter(item => item && item.nick && normalizeNick(item.nick).includes(eloQ)).slice(0, 5)
+        : [];
+
+      const delQ = normalizeNick(state.adminDeleteSearch);
+      const delSuggestions = delQ
+        ? Object.values(state.usersMap).filter(item => item && item.nick && normalizeNick(item.nick).includes(delQ)).slice(0, 5)
+        : [];
+
+      const activeBans = Object.values(state.bansMap).filter(b => b && (b.expiresAt === 'forever' || Number(b.expiresAt) > Date.now()));
+      const isMaintenance = Boolean(state.siteSettings?.maintenance);
+
+      return `
+        <div class="max-w-2xl mx-auto mt-3 space-y-6 pb-10">
+          <div class="rounded-2xl bg-grayNav border border-grayBorder p-6 space-y-4 shadow-xl">
+            <div class="flex items-center justify-between">
+              <h1 class="text-xl font-extrabold text-white">⚙️ Настройки аккаунта</h1>
+              <button type="button" onclick="window.handleLogout()" class="px-3 py-1.5 rounded-xl bg-red-950 hover:bg-red-800 text-red-200 text-xs font-extrabold cursor-pointer">
+                Выйти
+              </button>
+            </div>
+
+            <form onsubmit="window.saveUserSettings(event)" class="space-y-4">
+              <div>
+                <label class="block text-xs font-bold text-gray-300 mb-1">Никнейм</label>
+                <input id="settings-nick" type="text" value="${escapeHtml(u.nick)}"
+                       class="w-full bg-grayBase border border-grayBorder rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-tealAccent" />
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs font-bold text-gray-300 mb-1">Стиль доски</label>
+                  <select id="settings-board-style" class="w-full bg-grayBase border border-grayBorder rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none">
+                    <option value="green" ${u.boardStyle !== 'wood' ? 'selected' : ''}>Стандартный (зелёный)</option>
+                    <option value="wood" ${u.boardStyle === 'wood' ? 'selected' : ''}>Деревянный</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label class="block text-xs font-bold text-gray-300 mb-1">Тренер</label>
+                  <select id="settings-coach-id" class="w-full bg-grayBase border border-grayBorder rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none">
+                    ${COACHES.map(c => `<option value="${c.id}" ${u.coachId === c.id ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
+                  </select>
+                </div>
+              </div>
+
+              <label class="flex items-center justify-between px-4 py-3 rounded-xl bg-grayBase border border-grayBorder cursor-pointer">
+                <span class="text-xs font-bold text-white">Показывать архив партий всем</span>
+                <input id="settings-public-archive" type="checkbox" ${u.publicArchive !== false ? 'checked' : ''} class="accent-teal-400 w-4 h-4" />
+              </label>
+
+              <button type="submit" class="w-full py-3 rounded-xl bg-tealAccent hover:bg-tealBright text-black font-extrabold text-sm cursor-pointer">
+                Сохранить изменения
+              </button>
+            </form>
+          </div>
+
+          ${isAdmin ? `
+            <div class="rounded-2xl bg-grayNav border-2 border-red-500/60 p-5 space-y-6 shadow-2xl">
+              <div class="flex items-center justify-between border-b border-grayBorder pb-3">
+                <h2 class="text-base font-extrabold text-red-400">🛡️ Админ-панель (${escapeHtml(ADMIN_EMAIL)})</h2>
+              </div>
+
+              <!-- Выключатель сайта (Технические работы) -->
+              <div class="bg-grayBase p-4 rounded-xl border border-red-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h3 class="text-xs font-extrabold uppercase text-white">Режим технических работ</h3>
+                  <p class="text-[11px] text-gray-400 mt-0.5">Мгновенно отключает сайт для всех и завершает активные партии вничью.</p>
+                </div>
+                ${isMaintenance ? `
+                  <button type="button" onclick="window.adminToggleMaintenance(false)"
+                          class="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-extrabold cursor-pointer shrink-0">
+                    Включить сайт
+                  </button>
+                ` : `
+                  <button type="button" onclick="window.adminToggleMaintenance(true)"
+                          class="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-extrabold cursor-pointer shrink-0">
+                    Выключить сайт (Техработы)
+                  </button>
+                `}
+              </div>
+
+              <form onsubmit="window.adminIssueBan(event)" class="space-y-2.5 bg-grayBase p-4 rounded-xl border border-grayBorder">
+                <h3 class="text-xs font-extrabold uppercase text-white">Забанить игрока</h3>
+                <input id="admin-ban-search-input" type="text" value="${escapeHtml(state.adminBanSearch)}"
+                       oninput="window.adminUpdateBanSearch(this.value)"
+                       placeholder="Начните вводить ник игрока..."
+                       class="w-full bg-grayNav border border-grayBorder rounded-xl px-3 py-2 text-xs text-white focus:outline-none" />
+                ${banSuggestions.length > 0 && !state.adminBanTargetUid ? `
+                  <div class="rounded-xl bg-grayNav border border-grayBorder divide-y divide-grayBorder">
+                    ${banSuggestions.map(item => `
+                      <button type="button" onclick="window.adminSelectBanTarget('${escapeJsAttr(item.uid)}', '${escapeJsAttr(item.nick)}')"
+                              class="w-full text-left px-3 py-2 text-xs hover:bg-grayHover text-white cursor-pointer">
+                        ${renderTitleBadge(item)} <b>${escapeHtml(item.nick)}</b> <span class="text-gray-400">(${escapeHtml(item.email || '')})</span>
+                      </button>
+                    `).join('')}
+                  </div>
+                ` : ''}
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <input id="admin-ban-reason" type="text" placeholder="Причина (по желанию)"
+                         class="bg-grayNav border border-grayBorder rounded-xl px-3 py-2 text-xs text-white focus:outline-none" />
+                  <select id="admin-ban-duration" class="bg-grayNav border border-grayBorder rounded-xl px-3 py-2 text-xs text-white focus:outline-none">
+                    <option value="1h">1 час (1ч)</option>
+                    <option value="1d">1 день (1д)</option>
+                    <option value="7d">7 дней (7д)</option>
+                    <option value="12d">12 дней (12д)</option>
+                    <option value="30d">30 дней (30д)</option>
+                    <option value="forever">Навсегда</option>
+                  </select>
+                </div>
+                <button type="submit" class="w-full py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-extrabold cursor-pointer">
+                  Выдать бан
+                </button>
+              </form>
+
+              <div class="bg-grayBase p-4 rounded-xl border border-grayBorder space-y-2">
+                <h3 class="text-xs font-extrabold uppercase text-white">Забаненные игроки (${activeBans.length})</h3>
+                ${activeBans.length === 0 ? `<p class="text-xs text-gray-400">Список пуст</p>` : activeBans.map(b => `
+                  <div class="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-grayNav border border-grayBorder text-xs">
+                    <div>
+                      <b class="text-white">${escapeHtml(b.nick)}</b> — <span class="text-gray-300">${escapeHtml(b.reason)}</span>
+                      <span class="text-red-400 ml-1">(${formatBanDuration(b.expiresAt)})</span>
+                    </div>
+                    <button type="button" onclick="window.adminUnbanUser('${escapeJsAttr(b.uid)}')"
+                            class="px-2.5 py-1 rounded-lg bg-tealAccent text-black font-bold cursor-pointer">Разбанить</button>
+                  </div>
+                `).join('')}
+              </div>
+
+              <form onsubmit="window.adminSaveTitles(event)" class="space-y-3 bg-grayBase p-4 rounded-xl border border-grayBorder">
+                <h3 class="text-xs font-extrabold uppercase text-white">Выдача и снятие приписок (GM, IM, FM, CM, NM)</h3>
+                <input id="admin-title-search-input" type="text" value="${escapeHtml(state.adminTitleSearch)}"
+                       oninput="window.adminUpdateTitleSearch(this.value)"
+                       placeholder="Начните вводить ник игрока..."
+                       class="w-full bg-grayNav border border-grayBorder rounded-xl px-3 py-2 text-xs text-white focus:outline-none" />
+                ${titleSuggestions.length > 0 && !state.adminTitleTargetUid ? `
+                  <div class="rounded-xl bg-grayNav border border-grayBorder divide-y divide-grayBorder">
+                    ${titleSuggestions.map(item => `
+                      <button type="button" onclick="window.adminSelectTitleTarget('${escapeJsAttr(item.uid)}', '${escapeJsAttr(item.nick)}')"
+                              class="w-full text-left px-3 py-2 text-xs hover:bg-grayHover text-white cursor-pointer flex items-center gap-1.5">
+                        ${renderTitleBadge(item)} <b>${escapeHtml(item.nick)}</b>
+                      </button>
+                    `).join('')}
+                  </div>
+                ` : ''}
+
+                <div class="flex flex-wrap gap-1.5">
+                  ${CHESS_TITLES.map(t => {
+                    const active = state.adminSelectedTitles.includes(t);
+                    return `
+                      <button type="button" onclick="window.adminToggleTitleChip('${t}')"
+                              class="px-2.5 py-1 rounded-lg text-xs font-extrabold cursor-pointer border ${
+                                active
+                                  ? 'bg-[#991b1b] border-red-400 text-white'
+                                  : 'bg-grayNav border-grayBorder text-gray-300 hover:text-white'
+                              }">
+                        ${t} ${active ? '✕' : '+'}
+                      </button>
+                    `;
+                  }).join('')}
+                </div>
+
+                <div class="flex gap-2">
+                  <button type="button" onclick="window.clearAdminSelectedTitles()"
+                          class="px-3 py-2 rounded-xl bg-grayCard hover:bg-grayHover text-xs font-bold text-gray-300 cursor-pointer">
+                    Очистить все
+                  </button>
+                  <button type="submit" class="flex-1 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-extrabold cursor-pointer">
+                    Сохранить приписки
+                  </button>
+                </div>
+              </form>
+
+              <form onsubmit="window.adminForceChangeNick(event)" class="space-y-2.5 bg-grayBase p-4 rounded-xl border border-grayBorder">
+                <h3 class="text-xs font-extrabold uppercase text-white">Изменить ник любому игроку</h3>
+                <input id="admin-nick-search-input" type="text" value="${escapeHtml(state.adminNickSearch)}"
+                       oninput="window.adminUpdateNickSearch(this.value)"
+                       placeholder="Найти игрока по нику..."
+                       class="w-full bg-grayNav border border-grayBorder rounded-xl px-3 py-2 text-xs text-white focus:outline-none" />
+                ${nickSuggestions.length > 0 && !state.adminNickTargetUid ? `
+                  <div class="rounded-xl bg-grayNav border border-grayBorder divide-y divide-grayBorder">
+                    ${nickSuggestions.map(item => `
+                      <button type="button" onclick="window.adminSelectNickTarget('${escapeJsAttr(item.uid)}', '${escapeJsAttr(item.nick)}')"
+                              class="w-full text-left px-3 py-2 text-xs hover:bg-grayHover text-white cursor-pointer">
+                        <b>${escapeHtml(item.nick)}</b>
+                      </button>
+                    `).join('')}
+                  </div>
+                ` : ''}
+                <div class="flex gap-2">
+                  <input id="admin-force-nick-val" type="text" placeholder="Новый никнейм (любой)"
+                         class="flex-1 bg-grayNav border border-grayBorder rounded-xl px-3 py-2 text-xs text-white focus:outline-none" />
+                  <button type="submit" class="px-4 py-2 rounded-xl bg-tealAccent text-black text-xs font-extrabold cursor-pointer">
+                    Сменить
+                  </button>
+                </div>
+              </form>
+
+              <form onsubmit="window.adminSetUserElo(event)" class="space-y-2.5 bg-grayBase p-4 rounded-xl border border-grayBorder">
+                <h3 class="text-xs font-extrabold uppercase text-white">Изменить рейтинг Эло игрока</h3>
+                <input id="admin-elo-search-input" type="text" value="${escapeHtml(state.adminEloSearch)}"
+                       oninput="window.adminUpdateEloSearch(this.value)"
+                       placeholder="Начните вводить ник игрока..."
+                       class="w-full bg-grayNav border border-grayBorder rounded-xl px-3 py-2 text-xs text-white focus:outline-none" />
+                ${eloSuggestions.length > 0 && !state.adminEloTargetUid ? `
+                  <div class="rounded-xl bg-grayNav border border-grayBorder divide-y divide-grayBorder">
+                    ${eloSuggestions.map(item => `
+                      <button type="button" onclick="window.adminSelectEloTarget('${escapeJsAttr(item.uid)}', '${escapeJsAttr(item.nick)}')"
+                              class="w-full text-left px-3 py-2 text-xs hover:bg-grayHover text-white cursor-pointer flex items-center justify-between">
+                        <span>${renderTitleBadge(item)} <b>${escapeHtml(item.nick)}</b></span>
+                        <span class="text-tealAccent">${getUserRatingForTime(item, 10)} Эло</span>
+                      </button>
+                    `).join('')}
+                  </div>
+                ` : ''}
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <input id="admin-elo-val" type="number" min="100" max="9999" required placeholder="Новое Эло (напр. 1500)"
+                         class="bg-grayNav border border-grayBorder rounded-xl px-3 py-2 text-xs text-white focus:outline-none" />
+                  <select id="admin-elo-tc" class="bg-grayNav border border-grayBorder rounded-xl px-3 py-2 text-xs text-white focus:outline-none">
+                    <option value="all">Все режимы (10/3/1)</option>
+                    <option value="10">Только 10 мин</option>
+                    <option value="3">Только 3 мин</option>
+                    <option value="1">Только 1 мин</option>
+                  </select>
+                  <button type="submit" class="px-4 py-2 rounded-xl bg-tealAccent text-black text-xs font-extrabold cursor-pointer">
+                    Установить Эло
+                  </button>
+                </div>
+              </form>
+
+              <form onsubmit="window.adminDeleteAccount(event)" class="space-y-2.5 bg-grayBase p-4 rounded-xl border border-red-500/40">
+                <h3 class="text-xs font-extrabold uppercase text-red-400">Удалить аккаунт и освободить никнейм</h3>
+                <input id="admin-delete-search-input" type="text" value="${escapeHtml(state.adminDeleteSearch)}"
+                       oninput="window.adminUpdateDeleteSearch(this.value)"
+                       placeholder="Начните вводить ник аккаунта для удаления..."
+                       class="w-full bg-grayNav border border-grayBorder rounded-xl px-3 py-2 text-xs text-white focus:outline-none" />
+                ${delSuggestions.length > 0 && !state.adminDeleteTargetUid ? `
+                  <div class="rounded-xl bg-grayNav border border-grayBorder divide-y divide-grayBorder">
+                    ${delSuggestions.map(item => `
+                      <button type="button" onclick="window.adminSelectDeleteTarget('${escapeJsAttr(item.uid)}', '${escapeJsAttr(item.nick)}')"
+                              class="w-full text-left px-3 py-2 text-xs hover:bg-grayHover text-white cursor-pointer flex items-center justify-between">
+                        <span>${renderTitleBadge(item)} <b>${escapeHtml(item.nick)}</b></span>
+                        <span class="text-gray-400">${escapeHtml(item.email || '')}</span>
+                      </button>
+                    `).join('')}
+                  </div>
+                ` : ''}
+                <button type="submit" class="w-full py-2 rounded-xl bg-red-700 hover:bg-red-600 text-white text-xs font-extrabold cursor-pointer">
+                  Удалить аккаунт навсегда
+                </button>
+              </form>
+            </div>
+          ` : ''}
+        </div>
+      `;
+    }
+
+    function renderMaintenanceScreen() {
+      return `
+        <div class="min-h-screen flex items-center justify-center p-4 bg-grayBase">
+          <div class="max-w-md w-full rounded-2xl bg-grayNav border border-tealAccent/50 p-7 shadow-2xl space-y-5">
+            <div class="text-center space-y-2">
+              <div class="text-4xl">🛠️</div>
+              <h1 class="text-2xl font-black text-white">Технические работы</h1>
+              <p class="text-xs text-gray-300 leading-relaxed">
+                Сайт <b>BurmalChess</b> временно закрыт на техническое обслуживание. Все активные партии завершены вничью. Пожалуйста, зайдите позже.
+              </p>
+            </div>
+
+            <div class="border-t border-grayBorder pt-4 space-y-3">
+              <div class="text-[11px] font-bold text-gray-400 text-center">Вход для администратора</div>
+              <form onsubmit="window.handleCredentialsLogin(event)" class="space-y-2.5">
+                <input id="login-identifier" type="text" required placeholder="Почта администратора"
+                       class="w-full bg-grayBase border border-grayBorder rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-tealAccent" />
+                <input id="login-password" type="password" required placeholder="Пароль"
+                       class="w-full bg-grayBase border border-grayBorder rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-tealAccent" />
+                <button type="submit" class="w-full py-2.5 rounded-xl bg-tealAccent text-black text-xs font-extrabold cursor-pointer">
+                  Войти по почте
+                </button>
+              </form>
+              <button type="button" onclick="window.handleGoogleSignIn()"
+                      class="w-full py-2.5 rounded-xl bg-white hover:bg-gray-100 text-black font-extrabold text-xs flex items-center justify-center gap-2 cursor-pointer">
+                <span class="font-black text-blue-600">G</span>
+                <span>Войти через Google</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderBannedScreen(banInfo) {
+      return `
+        <div class="min-h-screen flex items-center justify-center p-4 bg-grayBase">
+          <div class="max-w-md w-full rounded-2xl bg-grayNav border-2 border-red-600 p-7 text-center space-y-4 shadow-2xl">
+            <div class="text-4xl">🚫</div>
+            <h1 class="text-2xl font-black text-red-400">Вы забанены!</h1>
+            <p class="text-sm text-gray-200">Причина: <b>${escapeHtml(banInfo.reason)}</b></p>
+            <p class="text-xs text-gray-400">Срок блокировки: <b>${formatBanDuration(banInfo.expiresAt)}</b></p>
+            <button type="button" onclick="window.handleLogout()" class="px-4 py-2 rounded-xl bg-grayCard text-xs font-bold text-gray-300 cursor-pointer">
+              Выйти из аккаунта
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    // =========================================================================
+    // ГЛАВНАЯ ФУНКЦИЯ ОТРИСОВКИ ПРИЛОЖЕНИЯ
+    // =========================================================================
+    function renderApp() {
+      const root = document.getElementById('app');
+      if (!root) return;
+
+      const u = state.currentUser;
+      const isMaintenance = Boolean(state.siteSettings?.maintenance);
+
+      if (isMaintenance && !isCurrentUserAdmin()) {
+        root.innerHTML = renderMaintenanceScreen();
+        return;
+      }
+
+      if (u) {
+        const activeBan = getActiveBan(u.uid);
+        if (activeBan && !isCurrentUserAdmin()) {
+          root.innerHTML = renderBannedScreen(activeBan);
+          return;
+        }
+      }
+
+      let mainHtml = '';
+      const p = state.path || '/';
+
+      if (!u) {
+        mainHtml = renderAuthScreen();
+      } else if (state.onboardingStep) {
+        mainHtml = renderOnboardingScreen();
+      } else if (p === '/play') {
+        mainHtml = renderPlayLobbyScreen();
+      } else if (p.startsWith('/game/')) {
+        mainHtml = renderActiveGameScreen();
+      } else if (p === '/courses') {
+        mainHtml = renderCoursesScreen();
+      } else if (p === '/bots') {
+        mainHtml = renderBotsScreen();
+      } else if (p === '/settings') {
+        mainHtml = renderSettingsScreen();
+      } else if (p.startsWith('/@')) {
+        mainHtml = renderProfileScreen(decodeURIComponent(p.slice(2)));
+      } else {
+        mainHtml = renderHomeScreen();
+      }
+
+      root.innerHTML = `
+        ${renderTopBar()}
+        <main class="flex-1 px-4 py-4">
+          ${mainHtml}
+        </main>
+      `;
+    }
+
+    window.renderApp = renderApp;
+
+    const cachedUser = loadLocalSession();
+    if (cachedUser) {
+      state.currentUser = cachedUser;
+      if (!cachedUser.nick) state.onboardingStep = 'nick';
+      else if (!cachedUser.coachId) state.onboardingStep = 'coach';
+    }
+
+    onAuthStateChanged(auth, async (fbUser) => {
+      if (fbUser) {
+        const snap = await get(ref(rtdb, `bc_users/${fbUser.uid}`));
+        if (snap.exists()) {
+          state.currentUser = snap.val();
+          saveLocalSession(state.currentUser);
+          setupPresence(fbUser.uid);
+          if (!state.currentUser.nick) state.onboardingStep = 'nick';
+          else if (!state.currentUser.coachId) state.onboardingStep = 'coach';
+          else state.onboardingStep = null;
+        }
+      }
+      renderApp();
+    });
+
+    initRealtimeListeners();
+    renderApp();
+  </script>
+</body>
+</html>
